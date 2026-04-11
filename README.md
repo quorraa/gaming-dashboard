@@ -70,10 +70,28 @@ What the install script does:
 - installs HWiNFO through `winget` unless it is already installed
 - creates a Windows Firewall allow rule for TCP `5103`
 
+Configure HWiNFO for no-click shared-memory startup:
+
+```powershell
+.\scripts\configure-hwinfo-autostart.ps1 -RestartIfRunning
+```
+
+What the HWiNFO helper does:
+
+- self-elevates because `HWiNFO64.INI` is usually under `Program Files`
+- enables `SensorsOnly=1`
+- enables `OpenSensors=1`
+- enables `ServerRole=1`
+- enables `SensorsSM=1`
+- enables `MinimalizeSensors=1`
+- enables `MinimalizeMainWnd=1`
+- disables the welcome/progress screen via `ShowWelcomeAndProgress=0`
+- disables the registration dialog via `ShowRegDialog=0`
+
 The published package is self-contained, so it does not require a separate .NET runtime on the target machine.
 
 ## HWiNFO setup
 
-- In HWiNFO, ensure `Shared Memory Support` is enabled.
+- Run `.\scripts\configure-hwinfo-autostart.ps1 -RestartIfRunning` once after installing HWiNFO.
 - The dashboard server runs on the same Windows machine, so it reads HWiNFO locally and the iPad never talks to HWiNFO directly.
 - No special localhost signing or browser trust setup is needed for HWiNFO access in this mode.

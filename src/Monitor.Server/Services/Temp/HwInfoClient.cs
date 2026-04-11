@@ -8,7 +8,7 @@ using Monitor.Server.Models;
 
 namespace Monitor.Server.Services.Temp;
 
-public sealed class HwInfoClient(HttpClient httpClient, DashboardSettings settings)
+public sealed class HwInfoClient(HttpClient httpClient, DashboardSettings settings, HwInfoProcessService processService)
 {
     private const int SensorStringLength = 128;
     private const int UnitStringLength = 16;
@@ -55,6 +55,12 @@ public sealed class HwInfoClient(HttpClient httpClient, DashboardSettings settin
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var bootstrapWarning = processService.EnsureSharedMemoryReady(cancellationToken);
+            if (bootstrapWarning is not null && !string.IsNullOrWhiteSpace(bootstrapWarning))
+            {
+                return Task.FromResult(new TempsSnapshot(BuildEmptyCards(bootstrapWarning), bootstrapWarning));
+            }
+
             using var mutex = Mutex.OpenExisting(settings.HwInfo.SharedMemoryMutexName);
             if (!mutex.WaitOne(TimeSpan.FromMilliseconds(250)))
             {

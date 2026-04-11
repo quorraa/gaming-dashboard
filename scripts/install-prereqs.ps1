@@ -83,6 +83,6 @@ Ensure-FirewallRule
 Write-Host ""
 Write-Host "Prerequisite setup complete."
 Write-Host "Next:"
-Write-Host "  1. Start HWiNFO and enable Shared Memory Support."
+Write-Host "  1. Run .\scripts\configure-hwinfo-autostart.ps1 -RestartIfRunning"
 Write-Host "  2. Run Monitor.Server.exe."
 Write-Host "  3. Open http://<pc-lan-ip>:$Port from your LAN device."

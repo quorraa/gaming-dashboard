@@ -36,6 +36,9 @@ public sealed class HwInfoSettings
     public bool Enabled { get; set; } = true;
     public string Mode { get; set; } = "SharedMemory";
     public string Endpoint { get; set; } = "http://127.0.0.1:55555/";
+    public bool AutoStart { get; set; } = true;
+    public string ExecutablePath { get; set; } = string.Empty;
+    public int AutoStartTimeoutMs { get; set; } = 15000;
     public string SharedMemoryMapName { get; set; } = @"Global\HWiNFO_SENS_SM2";
     public string SharedMemoryMutexName { get; set; } = @"Global\HWiNFO_SM2_MUTEX";
     public List<TemperatureSensorDefinition> Sensors { get; set; } = [];

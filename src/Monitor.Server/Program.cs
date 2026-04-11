@@ -23,6 +23,7 @@ builder.Services.AddSingleton<NetworkCollector>();
 builder.Services.AddSingleton<ProcessCollector>();
 builder.Services.AddSingleton<AudioMixerService>();
 builder.Services.AddSingleton<DiscordCollector>();
+builder.Services.AddSingleton<HwInfoProcessService>();
 builder.Services.AddHttpClient<HwInfoClient>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(2);
