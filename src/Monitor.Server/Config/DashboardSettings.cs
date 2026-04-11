@@ -67,7 +67,8 @@ public sealed class TemperatureSensorDefinition
 public sealed class DiscordSettings
 {
     public bool Enabled { get; set; }
-    public string Token { get; set; } = string.Empty;
+    public string RelayUrl { get; set; } = string.Empty;
+    public string ApiKey { get; set; } = string.Empty;
     public ulong GuildId { get; set; }
     public ulong MessagesChannelId { get; set; }
     public ulong VoiceChannelId { get; set; }

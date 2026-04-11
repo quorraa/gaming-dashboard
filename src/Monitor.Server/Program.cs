@@ -22,11 +22,14 @@ builder.Services.AddSingleton<SystemInfoCollector>();
 builder.Services.AddSingleton<NetworkCollector>();
 builder.Services.AddSingleton<ProcessCollector>();
 builder.Services.AddSingleton<AudioMixerService>();
-builder.Services.AddSingleton<DiscordCollector>();
 builder.Services.AddSingleton<HwInfoProcessService>();
 builder.Services.AddHttpClient<HwInfoClient>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(2);
+});
+builder.Services.AddHttpClient<DiscordCollector>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(4);
 });
 builder.Services.AddSingleton<DashboardSnapshotBuilder>();
 builder.Services.AddSingleton<DashboardSocketServer>();

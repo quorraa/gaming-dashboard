@@ -30,8 +30,9 @@ const elements = {
   settingsClearAudio: document.getElementById("settings-clear-audio"),
   settingsSaveDiscord: document.getElementById("settings-save-discord"),
   settingsDiscordEnabled: document.getElementById("settings-discord-enabled"),
-  settingsDiscordToken: document.getElementById("settings-discord-token"),
-  settingsDiscordTokenHint: document.getElementById("settings-discord-token-hint"),
+  settingsDiscordRelayUrl: document.getElementById("settings-discord-relay-url"),
+  settingsDiscordApiKey: document.getElementById("settings-discord-api-key"),
+  settingsDiscordApiKeyHint: document.getElementById("settings-discord-api-key-hint"),
   settingsDiscordGuild: document.getElementById("settings-discord-guild"),
   settingsDiscordMessages: document.getElementById("settings-discord-messages"),
   settingsDiscordVoice: document.getElementById("settings-discord-voice"),
@@ -203,9 +204,10 @@ function renderSettings(editorState) {
 
   const discordPreferences = preferences.discord ?? {};
   elements.settingsDiscordEnabled.checked = Boolean(discordPreferences.enabled);
-  elements.settingsDiscordToken.value = "";
-  elements.settingsDiscordToken.placeholder = discordPreferences.tokenHint ? `Stored: ${discordPreferences.tokenHint}` : "Paste bot token";
-  elements.settingsDiscordTokenHint.textContent = discordPreferences.tokenHint ? `Stored token: ${discordPreferences.tokenHint}` : "No token saved yet.";
+  elements.settingsDiscordRelayUrl.value = discordPreferences.relayUrl ?? "";
+  elements.settingsDiscordApiKey.value = "";
+  elements.settingsDiscordApiKey.placeholder = discordPreferences.apiKeyHint ? `Stored: ${discordPreferences.apiKeyHint}` : "Paste relay API key";
+  elements.settingsDiscordApiKeyHint.textContent = discordPreferences.apiKeyHint ? `Stored key: ${discordPreferences.apiKeyHint}` : "No relay key saved yet.";
   elements.settingsDiscordGuild.value = discordPreferences.guildId ?? "";
   elements.settingsDiscordMessages.value = discordPreferences.messagesChannelId ?? "";
   elements.settingsDiscordVoice.value = discordPreferences.voiceChannelId ?? "";
@@ -405,9 +407,10 @@ function onAudioAppToggleClick(event) {
 }
 
 function collectDiscordUpdate() {
-  const token = elements.settingsDiscordToken.value.trim();
+  const apiKey = elements.settingsDiscordApiKey.value.trim();
   const update = {
     enabled: elements.settingsDiscordEnabled.checked,
+    relayUrl: elements.settingsDiscordRelayUrl.value.trim(),
     guildId: elements.settingsDiscordGuild.value.trim(),
     messagesChannelId: elements.settingsDiscordMessages.value.trim(),
     voiceChannelId: elements.settingsDiscordVoice.value.trim(),
@@ -418,8 +421,8 @@ function collectDiscordUpdate() {
       .map(value => value.trim())
       .filter(Boolean)
   };
-  if (token) {
-    update.token = token;
+  if (apiKey) {
+    update.apiKey = apiKey;
   }
   return update;
 }
@@ -890,8 +893,12 @@ function mergeSettingsState(currentState, update) {
     if (typeof update.discord.enabled === "boolean") {
       currentDiscord.enabled = update.discord.enabled;
     }
-    if (typeof update.discord.token === "string") {
-      currentDiscord.token = "";
+    if (typeof update.discord.relayUrl === "string") {
+      currentDiscord.relayUrl = update.discord.relayUrl;
+    }
+    if (typeof update.discord.apiKey === "string") {
+      currentDiscord.apiKey = "";
+      currentDiscord.apiKeyHint = update.discord.apiKey ? maskSecret(update.discord.apiKey) : "";
     }
     if (typeof update.discord.guildId === "string") {
       currentDiscord.guildId = update.discord.guildId;
@@ -915,6 +922,17 @@ function mergeSettingsState(currentState, update) {
   }
 
   return next;
+}
+
+function maskSecret(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.length <= 8) {
+    return "*".repeat(trimmed.length);
+  }
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
 }
 
 function uniqueStrings(values) {

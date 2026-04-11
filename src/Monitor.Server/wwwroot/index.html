@@ -47,19 +47,24 @@
     </section>
     <section class="settings-section">
       <div class="settings-row">
-        <div class="section-title">Discord Bot</div>
+        <div class="section-title">Discord Relay</div>
         <button class="ghost-button" id="settings-save-discord" type="button">Apply</button>
       </div>
-      <div class="settings-subtitle">Bring your own bot. Save here and the panel reconnects without editing files.</div>
+      <div class="settings-subtitle">Point the dashboard at your hosted Discord companion. The bot token stays on the relay host.</div>
       <label class="settings-switch">
         <input id="settings-discord-enabled" type="checkbox">
         <span>Enable Discord panel</span>
       </label>
       <div class="settings-form-grid">
         <label class="settings-field">
-          <span class="settings-field-label">Bot token</span>
-          <input id="settings-discord-token" class="settings-input" type="password" placeholder="Paste bot token">
-          <span class="settings-hint" id="settings-discord-token-hint"></span>
+          <span class="settings-field-label">Relay URL</span>
+          <input id="settings-discord-relay-url" class="settings-input" type="url" placeholder="https://your-relay.example.com">
+          <span class="settings-hint">Hosted relay base URL.</span>
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Relay API key</span>
+          <input id="settings-discord-api-key" class="settings-input" type="password" placeholder="Paste relay key">
+          <span class="settings-hint" id="settings-discord-api-key-hint"></span>
         </label>
         <label class="settings-field">
           <span class="settings-field-label">Guild ID</span>

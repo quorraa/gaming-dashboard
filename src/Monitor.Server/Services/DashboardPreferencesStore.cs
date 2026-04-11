@@ -73,16 +73,17 @@ public sealed class DashboardPreferencesStore
 
             var discordUpdate = update.Discord;
             var currentDiscord = _current.Discord;
-            var token = discordUpdate?.Token switch
+            var apiKey = discordUpdate?.ApiKey switch
             {
-                null => currentDiscord.Token,
-                _ => discordUpdate.Token.Trim()
+                null => currentDiscord.ApiKey,
+                _ => discordUpdate.ApiKey.Trim()
             };
 
             var discord = new DiscordPreferencesSnapshot(
                 discordUpdate?.Enabled ?? currentDiscord.Enabled,
-                token,
-                BuildTokenHint(token),
+                discordUpdate?.RelayUrl?.Trim() ?? currentDiscord.RelayUrl,
+                apiKey,
+                BuildSecretHint(apiKey),
                 NormalizeDiscordId(discordUpdate?.GuildId, currentDiscord.GuildId),
                 NormalizeDiscordId(discordUpdate?.MessagesChannelId, currentDiscord.MessagesChannelId),
                 NormalizeDiscordId(discordUpdate?.VoiceChannelId, currentDiscord.VoiceChannelId),
@@ -125,8 +126,9 @@ public sealed class DashboardPreferencesStore
                     NormalizeAudioApps(loadedAudio.VisibleSessionMatches)),
                 new DiscordPreferencesSnapshot(
                     loadedDiscord.Enabled,
-                    loadedDiscord.Token,
-                    BuildTokenHint(loadedDiscord.Token),
+                    loadedDiscord.RelayUrl,
+                    loadedDiscord.ApiKey,
+                    BuildSecretHint(loadedDiscord.ApiKey),
                     NormalizeDiscordId(loadedDiscord.GuildId, defaults.Discord.GuildId),
                     NormalizeDiscordId(loadedDiscord.MessagesChannelId, defaults.Discord.MessagesChannelId),
                     NormalizeDiscordId(loadedDiscord.VoiceChannelId, defaults.Discord.VoiceChannelId),
@@ -151,8 +153,9 @@ public sealed class DashboardPreferencesStore
                 NormalizeAudioApps(settings.Audio.VisibleSessionMatches)),
             new DiscordPreferencesSnapshot(
                 settings.Discord.Enabled,
-                settings.Discord.Token,
-                BuildTokenHint(settings.Discord.Token),
+                settings.Discord.RelayUrl,
+                settings.Discord.ApiKey,
+                BuildSecretHint(settings.Discord.ApiKey),
                 settings.Discord.GuildId == 0 ? string.Empty : settings.Discord.GuildId.ToString(),
                 settings.Discord.MessagesChannelId == 0 ? string.Empty : settings.Discord.MessagesChannelId.ToString(),
                 settings.Discord.VoiceChannelId == 0 ? string.Empty : settings.Discord.VoiceChannelId.ToString(),
@@ -229,20 +232,20 @@ public sealed class DashboardPreferencesStore
         {
             Discord = current.Discord with
             {
-                Token = string.Empty,
-                TokenHint = BuildTokenHint(current.Discord.Token)
+                ApiKey = string.Empty,
+                ApiKeyHint = BuildSecretHint(current.Discord.ApiKey)
             }
         };
     }
 
-    private static string BuildTokenHint(string token)
+    private static string BuildSecretHint(string value)
     {
-        if (string.IsNullOrWhiteSpace(token))
+        if (string.IsNullOrWhiteSpace(value))
         {
             return string.Empty;
         }
 
-        var trimmed = token.Trim();
+        var trimmed = value.Trim();
         if (trimmed.Length <= 8)
         {
             return new string('*', trimmed.Length);

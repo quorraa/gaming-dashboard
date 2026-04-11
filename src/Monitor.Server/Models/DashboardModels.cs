@@ -136,8 +136,9 @@ public sealed record AudioPreferencesSnapshot(
 
 public sealed record DiscordPreferencesSnapshot(
     bool Enabled,
-    string Token,
-    string TokenHint,
+    string RelayUrl,
+    string ApiKey,
+    string ApiKeyHint,
     string GuildId,
     string MessagesChannelId,
     string VoiceChannelId,
@@ -157,7 +158,8 @@ public sealed record AudioPreferencesUpdate(
 
 public sealed record DiscordPreferencesUpdate(
     bool? Enabled,
-    string? Token,
+    string? RelayUrl,
+    string? ApiKey,
     string? GuildId,
     string? MessagesChannelId,
     string? VoiceChannelId,

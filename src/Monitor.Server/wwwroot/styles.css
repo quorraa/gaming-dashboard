@@ -828,7 +828,7 @@ body.layout-phone-landscape.is-fitted .dashboard-viewport {
 
 body.layout-phone-landscape .dashboard {
   gap: 8px;
-  grid-template-columns: 1.04fr 1.04fr 1.08fr 0.92fr 0.92fr;
+  grid-template-columns: 1.08fr 1.08fr 1.24fr 0.84fr 0.84fr;
   grid-template-rows: minmax(0, 0.76fr) minmax(0, 0.72fr) minmax(0, 0.66fr);
   grid-template-areas:
     "temps temps network discord discord"
@@ -1055,7 +1055,7 @@ body.layout-phone-landscape .panel-discord {
 }
 
 body.layout-phone-landscape.discord-disabled .dashboard {
-  grid-template-columns: 1.04fr 1.04fr 1.08fr 0.92fr 0.92fr;
+  grid-template-columns: 1.08fr 1.08fr 1.24fr 0.84fr 0.84fr;
   grid-template-rows: minmax(0, 0.76fr) minmax(0, 0.72fr) minmax(0, 0.66fr);
   grid-template-areas:
     "temps temps network system system"
