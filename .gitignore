@@ -1,5 +1,6 @@
 bin/
 obj/
+artifacts/
 *.log
 *.err.log
 *.out.log

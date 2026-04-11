@@ -49,6 +49,29 @@ dotnet run --project .\src\Monitor.Server
 
 Then open `http://<gaming-pc-lan-ip>:5055` on the iPad.
 
+## Portable build
+
+Build a self-contained Windows package:
+
+```powershell
+.\scripts\publish-portable.ps1
+```
+
+That publishes to `.\artifacts\publish\win-x64-Release` and also creates a zip in `.\artifacts`.
+
+Prepare a target machine for the portable package:
+
+```powershell
+.\scripts\install-prereqs.ps1
+```
+
+What the install script does:
+
+- installs HWiNFO through `winget` unless it is already installed
+- creates a Windows Firewall allow rule for TCP `5103`
+
+The published package is self-contained, so it does not require a separate .NET runtime on the target machine.
+
 ## HWiNFO setup
 
 - In HWiNFO, ensure `Shared Memory Support` is enabled.
