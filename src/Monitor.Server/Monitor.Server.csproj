@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>monitor-lan-dashboard-7c9e1d3f-discord</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Discord.Net.WebSocket" Version="3.19.1" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="System.Management" Version="10.0.5" />
+  </ItemGroup>
+
+</Project>

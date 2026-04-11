@@ -1,0 +1,1250 @@
+:root {
+  --bg: #090914;
+  --panel-border: rgba(53, 212, 255, 0.3);
+  --panel-glow: rgba(24, 196, 255, 0.14);
+  --cyan: #1fe2ff;
+  --teal: #27efb1;
+  --lime: #31ff8b;
+  --amber: #ffbf2f;
+  --violet: #9158ff;
+  --danger: #ff547d;
+  --text: #edf1ff;
+  --muted: #7d86a7;
+  --track: rgba(87, 94, 143, 0.28);
+  --card: rgba(255, 255, 255, 0.03);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(38, 93, 226, 0.18), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(120, 61, 255, 0.14), transparent 30%),
+    linear-gradient(180deg, #050611 0%, #090914 100%);
+  color: var(--text);
+  font-family: "Rajdhani", sans-serif;
+}
+
+body {
+  padding: 14px;
+}
+
+.dashboard-viewport {
+  width: 100%;
+  min-height: calc(100vh - 28px);
+  min-height: calc(100dvh - 28px);
+  position: relative;
+}
+
+body.is-fitted {
+  overflow: hidden;
+}
+
+body.is-fitted .dashboard-viewport {
+  height: calc(100vh - 28px);
+  height: calc(100dvh - 28px);
+  overflow: hidden;
+}
+
+body.manual-fullscreen {
+  padding: 0;
+  overflow: hidden;
+}
+
+body.manual-fullscreen .dashboard-viewport {
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  padding: 6px;
+  overflow: hidden;
+}
+
+body.manual-fullscreen .fullscreen-toggle {
+  top: max(8px, env(safe-area-inset-top));
+  right: max(8px, env(safe-area-inset-right));
+}
+
+.fullscreen-toggle {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(83, 221, 255, 0.35);
+  background: rgba(11, 15, 32, 0.88);
+  color: var(--cyan);
+  box-shadow: 0 0 18px rgba(24, 196, 255, 0.18);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.fullscreen-toggle.is-active {
+  color: var(--lime);
+  border-color: rgba(49, 255, 139, 0.45);
+}
+
+.settings-toggle {
+  position: fixed;
+  top: 50px;
+  right: 10px;
+  z-index: 20;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(83, 221, 255, 0.35);
+  background: rgba(11, 15, 32, 0.88);
+  color: var(--cyan);
+  box-shadow: 0 0 18px rgba(24, 196, 255, 0.18);
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  background: rgba(4, 6, 12, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.settings-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 25;
+  width: min(360px, 92vw);
+  height: 100vh;
+  height: 100dvh;
+  padding: 18px 16px 20px;
+  background: linear-gradient(180deg, rgba(12, 14, 27, 0.98), rgba(8, 10, 20, 0.98));
+  border-left: 1px solid rgba(83, 221, 255, 0.24);
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+  transform: translateX(102%);
+  transition: transform 160ms ease;
+  overflow: auto;
+}
+
+body.settings-open .settings-drawer {
+  transform: translateX(0);
+}
+
+.settings-header,
+.settings-row,
+.settings-range-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-header {
+  margin-bottom: 18px;
+}
+
+.settings-section + .settings-section {
+  margin-top: 18px;
+}
+
+.settings-subtitle {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.settings-close,
+.ghost-button,
+.toggle-pill {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+}
+
+.settings-close,
+.ghost-button {
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.toggle-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.toggle-pill {
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.toggle-pill.is-active {
+  border-color: rgba(31, 226, 255, 0.38);
+  background: rgba(31, 226, 255, 0.12);
+  color: var(--cyan);
+  box-shadow: 0 0 14px rgba(31, 226, 255, 0.12);
+}
+
+.audio-app-grid {
+  max-height: 42vh;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.settings-range {
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(31, 226, 255, 0.22), rgba(145, 88, 255, 0.18));
+  border: 1px solid rgba(72, 202, 255, 0.18);
+}
+
+.settings-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, white, #91f6ff 35%, #1fe2ff 100%);
+  box-shadow: 0 0 16px rgba(31, 226, 255, 0.28);
+  border: none;
+}
+
+.settings-label,
+.settings-range-value {
+  font-size: 0.9rem;
+}
+
+.settings-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 10px;
+  margin-top: 12px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-field-full {
+  grid-column: 1 / -1;
+}
+
+.settings-field-label,
+.settings-hint {
+  font-size: 0.78rem;
+}
+
+.settings-field-label {
+  color: var(--text);
+}
+
+.settings-hint {
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.settings-input {
+  width: 100%;
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(83, 221, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.settings-input::placeholder {
+  color: rgba(125, 134, 167, 0.9);
+}
+
+.settings-textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-areas:
+    "temps temps network"
+    "discord discord network"
+    "audio processes system";
+  gap: 12px;
+  min-height: calc(100vh - 28px);
+  min-height: calc(100dvh - 28px);
+  transform-origin: top left;
+  will-change: transform;
+  align-content: stretch;
+}
+
+.panel {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  background: linear-gradient(180deg, rgba(14, 14, 30, 0.94), rgba(11, 11, 23, 0.94));
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 0 24px var(--panel-glow);
+  padding: 12px 14px 14px;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(38, 226, 255, 0.04), transparent 30%, transparent 70%, rgba(145, 88, 255, 0.05));
+  pointer-events: none;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-family: "Orbitron", sans-serif;
+}
+
+.panel-state {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.discord-state.state-connected { color: #6fb7ff; }
+.discord-state.state-warning { color: var(--amber); }
+.discord-state.state-disabled { color: var(--muted); }
+
+.panel-temps {
+  grid-area: temps;
+  display: flex;
+  flex-direction: column;
+}
+.panel-network { grid-area: network; }
+.panel-discord { grid-area: discord; }
+.panel-audio { grid-area: audio; }
+.panel-processes { grid-area: processes; }
+.panel-system { grid-area: system; }
+
+.temp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 4px;
+  flex: 1;
+  min-height: 0;
+}
+
+.temp-card,
+.mini-card,
+.message-card,
+.voice-row,
+.audio-row,
+.process-row {
+  background: var(--card);
+  border: 1px solid rgba(110, 128, 192, 0.15);
+  border-radius: 10px;
+}
+
+.temp-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 8px;
+  padding: 12px;
+  min-height: 0;
+}
+
+.temp-main {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-height: 0;
+}
+
+.temp-label,
+.section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.temp-value,
+.metric-value {
+  font-family: "Orbitron", sans-serif;
+  line-height: 1;
+}
+
+.temp-value {
+  margin: 2px 0 0;
+  font-size: clamp(1.7rem, 2.4vw, 2.3rem);
+}
+
+.severity-good { color: var(--lime); }
+.severity-warning { color: var(--amber); }
+.severity-danger { color: var(--danger); }
+.severity-offline { color: #6e78a4; }
+
+.bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--teal));
+}
+
+.bar-fill.warning {
+  background: linear-gradient(90deg, #ffd24f, #ff9c1b);
+}
+
+.bar-fill.danger {
+  background: linear-gradient(90deg, #ff6684, #ff325b);
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.metric-row.compact {
+  margin-top: 8px;
+}
+
+.metric-block {
+  text-align: center;
+  padding: 4px 0;
+}
+
+.metric-value {
+  color: var(--cyan);
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+}
+
+.metric-value.small {
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+}
+
+.metric-label,
+.footer-note,
+.warning-text {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.temp-card .footer-note {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.1;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#temps-warning:empty {
+  display: none;
+}
+
+.sparkline-wrap {
+  margin-top: 10px;
+  height: 128px;
+  padding: 2px 0 0;
+}
+
+.sparkline {
+  width: 100%;
+  height: 100%;
+}
+
+.sparkline-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sparkline-line.down { stroke: var(--cyan); }
+.sparkline-line.up { stroke: var(--violet); opacity: 0.82; }
+
+.panel-discord {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.discord-track {
+  min-height: 0;
+}
+
+.discord-sections {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  min-height: 0;
+}
+
+.discord-block {
+  min-height: 0;
+}
+
+.discord-section-title {
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.discord-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.discord-identity-card,
+.discord-line,
+.discord-message-row {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(110, 128, 192, 0.15);
+  border-radius: 10px;
+}
+
+.discord-identity-card {
+  padding: 8px 10px;
+}
+
+.discord-identity-row,
+.discord-line,
+.discord-message-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.discord-identity-row {
+  justify-content: flex-start;
+}
+
+.discord-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+
+.discord-subtitle,
+.discord-line-side,
+.discord-message-copy,
+.discord-group-note,
+.discord-empty {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.2;
+}
+
+.discord-subtitle {
+  margin-top: 2px;
+}
+
+.discord-group-note {
+  margin-bottom: 2px;
+}
+
+.discord-line {
+  padding: 5px 7px;
+}
+
+.discord-line-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.discord-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discord-line-side {
+  text-align: right;
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discord-message-row {
+  padding: 5px 7px;
+}
+
+.discord-message-copy {
+  margin-top: 2px;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.discord-empty {
+  padding: 2px 0;
+}
+
+.discord-track:empty,
+.discord-list:empty,
+#discord-warning:empty {
+  display: none;
+}
+
+.user-card,
+.mini-card,
+.voice-row,
+.message-card,
+.audio-row,
+.process-row {
+  padding: 10px 12px;
+}
+
+.favorites-list,
+#voice-channel,
+#messages-list,
+.audio-list,
+#processes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audio-list.is-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+
+.user-name-row,
+.voice-meta,
+.process-meta,
+.audio-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.accent-good { color: var(--lime); }
+.accent-warning { color: var(--amber); }
+.accent-danger { color: var(--danger); }
+.accent-muted { color: #8a91b6; }
+
+.audio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slider-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px 38px;
+  gap: 8px;
+  align-items: center;
+}
+
+.audio-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slider {
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(31, 226, 255, 0.2), rgba(145, 88, 255, 0.18));
+  border: 1px solid rgba(72, 202, 255, 0.2);
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, white, #91f6ff 35%, #1fe2ff 100%);
+  box-shadow: 0 0 18px rgba(31, 226, 255, 0.32);
+  border: none;
+}
+
+.mute-button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 10px;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  min-width: 0;
+  width: 38px;
+  height: 28px;
+  padding: 0;
+}
+
+.mute-button.is-muted {
+  border-color: rgba(255, 84, 125, 0.4);
+  color: var(--danger);
+}
+
+.system-list {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px 10px;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.system-list dt {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.system-list dd {
+  margin: 0;
+  text-align: right;
+  font-size: 0.92rem;
+}
+
+.panel-system {
+  padding: 10px 11px 11px;
+}
+
+.panel-system .panel-header {
+  margin-bottom: 8px;
+}
+
+.warning-text {
+  margin-top: 8px;
+}
+
+@media (max-width: 1200px) and (orientation: portrait) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "temps"
+      "network"
+      "discord"
+      "audio"
+      "processes"
+      "system";
+  }
+
+  .temp-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+body.layout-phone-landscape {
+  height: 100%;
+  overflow: hidden;
+  padding: 8px;
+}
+
+body.layout-phone-landscape.is-fitted .dashboard-viewport {
+  height: calc(100vh - 16px);
+  height: calc(100dvh - 16px);
+}
+
+body.layout-phone-landscape .dashboard {
+  gap: 8px;
+  grid-template-columns: 1.04fr 1.04fr 1.08fr 0.92fr 0.92fr;
+  grid-template-rows: minmax(0, 0.76fr) minmax(0, 0.72fr) minmax(0, 0.66fr);
+  grid-template-areas:
+    "temps temps network discord discord"
+    "temps temps system discord discord"
+    "audio audio audio processes processes";
+  min-height: calc(100vh - 16px);
+  min-height: calc(100dvh - 16px);
+  height: calc(100vh - 16px);
+  height: calc(100dvh - 16px);
+}
+
+body.layout-phone-landscape .panel {
+  padding: 8px 10px 10px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+body.layout-phone-landscape .panel::-webkit-scrollbar {
+  display: none;
+}
+
+body.layout-phone-landscape .panel-header {
+  margin-bottom: 6px;
+}
+
+body.layout-phone-landscape .eyebrow {
+  font-size: 0.56rem;
+  letter-spacing: 0.18em;
+}
+
+body.layout-phone-landscape .temp-grid {
+  gap: 6px;
+}
+
+body.layout-phone-landscape .temp-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  padding-top: 1px;
+}
+
+body.layout-phone-landscape .temp-card,
+body.layout-phone-landscape .mini-card,
+body.layout-phone-landscape .message-card,
+body.layout-phone-landscape .voice-row,
+body.layout-phone-landscape .audio-row,
+body.layout-phone-landscape .process-row,
+body.layout-phone-landscape .user-card {
+  padding: 8px;
+}
+
+body.layout-phone-landscape .temp-card {
+  gap: 3px;
+  padding: 7px;
+}
+
+body.layout-phone-landscape .temp-label,
+body.layout-phone-landscape .section-title,
+body.layout-phone-landscape .system-list dt {
+  font-size: 0.62rem;
+}
+
+body.layout-phone-landscape .temp-value {
+  margin: 0;
+  font-size: clamp(1.12rem, 1.9vw, 1.38rem);
+}
+
+body.layout-phone-landscape .temp-main {
+  gap: 4px;
+}
+
+body.layout-phone-landscape .metric-value {
+  font-size: clamp(1.05rem, 1.8vw, 1.45rem);
+}
+
+body.layout-phone-landscape .metric-value.small,
+body.layout-phone-landscape .system-list dd {
+  font-size: 0.86rem;
+}
+
+body.layout-phone-landscape .metric-label,
+body.layout-phone-landscape .footer-note,
+body.layout-phone-landscape .warning-text,
+body.layout-phone-landscape .status-pill {
+  font-size: 0.66rem;
+}
+
+body.layout-phone-landscape .sparkline-wrap {
+  margin-top: 4px;
+  height: 42px;
+}
+
+body.layout-phone-landscape .favorites-list,
+body.layout-phone-landscape #voice-channel,
+body.layout-phone-landscape #messages-list,
+body.layout-phone-landscape .audio-list,
+body.layout-phone-landscape #processes-list {
+  gap: 6px;
+}
+
+body.layout-phone-landscape .audio-row {
+  gap: 2px;
+  padding: 7px 8px;
+}
+
+body.layout-phone-landscape .slider-wrap {
+  grid-template-columns: minmax(0, 1fr) 40px 28px;
+  gap: 4px;
+}
+
+body.layout-phone-landscape .slider {
+  height: 12px;
+}
+
+body.layout-phone-landscape .slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+body.layout-phone-landscape .mute-button {
+  width: 28px;
+  height: 20px;
+  font-size: 0.78rem;
+}
+
+body.layout-phone-landscape .audio-list.is-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+body.layout-phone-landscape .audio-name {
+  font-size: 0.9rem;
+}
+
+body.layout-phone-landscape .audio-list .metric-value.small {
+  font-size: 0.72rem;
+}
+
+body.layout-phone-landscape .panel-network,
+body.layout-phone-landscape .panel-discord,
+body.layout-phone-landscape .panel-system,
+body.layout-phone-landscape .panel-processes {
+  padding: 8px;
+}
+
+body.layout-phone-landscape .panel-network .metric-row,
+body.layout-phone-landscape .panel-network .metric-row.compact {
+  gap: 4px;
+}
+
+body.layout-phone-landscape .panel-network .metric-block {
+  padding: 0;
+}
+
+body.layout-phone-landscape .panel-network .metric-value {
+  font-size: 0.98rem;
+}
+
+body.layout-phone-landscape .panel-network .metric-value.small {
+  font-size: 0.86rem;
+}
+
+body.layout-phone-landscape .panel-network .metric-label {
+  font-size: 0.6rem;
+}
+
+body.layout-phone-landscape .panel-discord {
+  gap: 4px;
+}
+
+body.layout-phone-landscape .discord-identity-card,
+body.layout-phone-landscape .discord-line,
+body.layout-phone-landscape .discord-message-row {
+  padding: 4px 6px;
+}
+
+body.layout-phone-landscape .discord-section-title,
+body.layout-phone-landscape .discord-subtitle,
+body.layout-phone-landscape .discord-line-side,
+body.layout-phone-landscape .discord-message-copy,
+body.layout-phone-landscape .discord-group-note,
+body.layout-phone-landscape .discord-empty,
+body.layout-phone-landscape .panel-state {
+  font-size: 0.62rem;
+}
+
+body.layout-phone-landscape .system-list {
+  grid-template-columns: 58px 1fr;
+  gap: 4px 6px;
+  line-height: 1.05;
+}
+
+body.layout-phone-landscape .panel-system {
+  padding: 5px 6px 6px;
+}
+
+body.layout-phone-landscape .panel-system .panel-header {
+  margin-bottom: 3px;
+}
+
+body.layout-phone-landscape .panel-system .system-list {
+  grid-template-columns: 42px 1fr;
+  gap: 2px 4px;
+  line-height: 1.02;
+}
+
+body.layout-phone-landscape .panel-system .system-list dt {
+  font-size: 0.54rem;
+}
+
+body.layout-phone-landscape .panel-system .system-list dd {
+  font-size: 0.76rem;
+}
+
+body.layout-phone-landscape #favorites-list .discord-line:nth-child(n + 4),
+body.layout-phone-landscape #messages-list .discord-message-row:nth-child(n + 3),
+body.layout-phone-landscape #processes-list .process-row:nth-child(n + 4),
+body.layout-phone-landscape #voice-channel .discord-line:nth-child(n + 5) {
+  display: none;
+}
+
+body.layout-phone-landscape .panel-discord {
+  min-height: 0;
+}
+
+body.layout-phone-landscape.discord-disabled .dashboard {
+  grid-template-columns: 1.04fr 1.04fr 1.08fr 0.92fr 0.92fr;
+  grid-template-rows: minmax(0, 0.76fr) minmax(0, 0.72fr) minmax(0, 0.66fr);
+  grid-template-areas:
+    "temps temps network system system"
+    "temps temps audio audio audio"
+    "temps temps processes processes processes";
+}
+
+body.layout-phone-landscape.discord-disabled .temp-grid {
+  height: 100%;
+}
+
+body.layout-phone-landscape.discord-disabled #processes-list .process-row:nth-child(n + 4) {
+  display: none;
+}
+
+body.layout-tablet-landscape {
+  height: 100%;
+  overflow: hidden;
+  padding: 10px;
+}
+
+body.layout-tablet-landscape .dashboard-viewport {
+  height: calc(100vh - 20px);
+  height: calc(100dvh - 20px);
+  overflow: hidden;
+}
+
+body.layout-tablet-landscape .dashboard {
+  grid-template-columns: 1.14fr 1.14fr 0.92fr 0.92fr;
+  grid-template-rows: minmax(0, 0.76fr) minmax(0, 0.64fr) minmax(0, 0.64fr);
+  grid-template-areas:
+    "temps temps network discord"
+    "temps temps system discord"
+    "audio audio processes processes";
+  gap: 10px;
+  min-height: calc(100vh - 20px);
+  min-height: calc(100dvh - 20px);
+  height: calc(100vh - 20px);
+  height: calc(100dvh - 20px);
+}
+
+body.layout-tablet-landscape .panel {
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+body.layout-tablet-landscape .panel::-webkit-scrollbar {
+  display: none;
+}
+
+body.layout-tablet-landscape .temp-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+body.layout-tablet-landscape .temp-card {
+  padding: 8px 10px;
+  gap: 4px;
+}
+
+body.layout-tablet-landscape .temp-main {
+  gap: 4px;
+}
+
+body.layout-tablet-landscape .sparkline-wrap {
+  height: 40px;
+}
+
+body.layout-tablet-landscape .temp-card .footer-note {
+  -webkit-line-clamp: 2;
+}
+
+body.layout-tablet-landscape #processes-list .process-row:nth-child(n + 5),
+body.layout-tablet-landscape #messages-list .message-card:nth-child(n + 5),
+body.layout-tablet-landscape #voice-channel .voice-row:nth-child(n + 5) {
+  display: none;
+}
+
+body.layout-tablet-landscape .audio-list.is-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+body.layout-tablet-landscape .audio-row {
+  gap: 3px;
+  padding: 8px 10px;
+}
+
+body.layout-tablet-landscape .slider-wrap {
+  grid-template-columns: minmax(0, 1fr) 48px 32px;
+  gap: 5px;
+}
+
+body.layout-tablet-landscape .slider {
+  height: 14px;
+}
+
+body.layout-tablet-landscape .slider::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+}
+
+body.layout-tablet-landscape .mute-button {
+  width: 32px;
+  height: 22px;
+}
+
+body.layout-tablet-landscape .audio-name {
+  font-size: 0.96rem;
+}
+
+body.layout-tablet-landscape .audio-list .metric-value.small {
+  font-size: 0.78rem;
+}
+
+body.layout-tablet-landscape .discord-identity-card,
+body.layout-tablet-landscape .discord-line,
+body.layout-tablet-landscape .discord-message-row {
+  padding: 6px 8px;
+}
+
+body.layout-tablet-landscape .panel-system {
+  padding: 9px 10px 10px;
+}
+
+body.layout-tablet-landscape .panel-system .panel-header {
+  margin-bottom: 7px;
+}
+
+body.layout-tablet-landscape .panel-system .system-list {
+  grid-template-columns: 66px 1fr;
+  gap: 7px 9px;
+  line-height: 1.1;
+}
+
+body.layout-tablet-landscape .panel-system .system-list dt {
+  font-size: 0.67rem;
+}
+
+body.layout-tablet-landscape .panel-system .system-list dd {
+  font-size: 0.94rem;
+}
+
+body.layout-tablet-landscape .discord-section-title,
+body.layout-tablet-landscape .discord-subtitle,
+body.layout-tablet-landscape .discord-line-side,
+body.layout-tablet-landscape .discord-message-copy,
+body.layout-tablet-landscape .discord-group-note,
+body.layout-tablet-landscape .discord-empty,
+body.layout-tablet-landscape .panel-state {
+  font-size: 0.66rem;
+}
+
+body.layout-tablet-landscape.discord-disabled .dashboard {
+  grid-template-columns: 1.14fr 1.14fr 0.92fr 0.92fr;
+  grid-template-rows: minmax(0, 0.76fr) minmax(0, 0.64fr) minmax(0, 0.64fr);
+  grid-template-areas:
+    "temps temps network discord"
+    "temps temps system discord"
+    "audio audio processes processes";
+}
+
+body.layout-phone-landscape.audio-over-4 .dashboard {
+  grid-template-rows: minmax(0, 0.72fr) minmax(0, 0.66fr) minmax(0, 0.76fr);
+}
+
+body.layout-tablet-landscape.audio-over-4 .dashboard {
+  grid-template-rows: minmax(0, 0.72fr) minmax(0, 0.58fr) minmax(0, 0.74fr);
+}
+
+body.layout-tablet-landscape.discord-disabled #processes-list .process-row:nth-child(n + 5) {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-drawer {
+    width: min(320px, 94vw);
+  }
+
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

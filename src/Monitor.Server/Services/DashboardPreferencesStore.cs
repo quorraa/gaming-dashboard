@@ -1,0 +1,253 @@
+using System.Text.Json;
+using Monitor.Server.Config;
+using Monitor.Server.Models;
+
+namespace Monitor.Server.Services;
+
+public sealed class DashboardPreferencesStore
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+    };
+
+    private static readonly PanelOption[] PanelCatalog =
+    [
+        new("temps", "Temps"),
+        new("network", "Network"),
+        new("discord", "Discord"),
+        new("audio", "Audio"),
+        new("processes", "Processes"),
+        new("system", "System")
+    ];
+
+    private readonly Lock _lock = new();
+    private readonly string _path;
+    private readonly ILogger<DashboardPreferencesStore> _logger;
+    private DashboardPreferencesSnapshot _current;
+
+    public DashboardPreferencesStore(
+        DashboardSettings settings,
+        IHostEnvironment environment,
+        ILogger<DashboardPreferencesStore> logger)
+    {
+        _logger = logger;
+        _path = Path.Combine(environment.ContentRootPath, "dashboard.user.json");
+        _current = Load(settings);
+    }
+
+    public DashboardPreferencesSnapshot Current
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _current;
+            }
+        }
+    }
+
+    public DashboardEditorState GetEditorState(IReadOnlyList<string> availableAudioApps)
+    {
+        var current = Current;
+        var mergedAudioApps = NormalizeAudioApps(current.Audio.VisibleSessionMatches.Concat(availableAudioApps));
+        return new DashboardEditorState(PanelCatalog, SanitizeForEditor(current), mergedAudioApps);
+    }
+
+    public DashboardPreferencesSnapshot Update(DashboardPreferencesUpdate update)
+    {
+        lock (_lock)
+        {
+            var visiblePanels = update.VisiblePanels is null
+                ? _current.VisiblePanels
+                : NormalizePanels(update.VisiblePanels, _current.VisiblePanels);
+
+            var audioUpdate = update.Audio;
+            var currentAudio = _current.Audio;
+            var audio = new AudioPreferencesSnapshot(
+                audioUpdate?.IncludeSystemSounds ?? currentAudio.IncludeSystemSounds,
+                Math.Clamp(audioUpdate?.MaxSessions ?? currentAudio.MaxSessions, 1, 24),
+                audioUpdate?.VisibleSessionMatches is null
+                    ? currentAudio.VisibleSessionMatches
+                    : NormalizeAudioApps(audioUpdate.VisibleSessionMatches));
+
+            var discordUpdate = update.Discord;
+            var currentDiscord = _current.Discord;
+            var token = discordUpdate?.Token switch
+            {
+                null => currentDiscord.Token,
+                _ => discordUpdate.Token.Trim()
+            };
+
+            var discord = new DiscordPreferencesSnapshot(
+                discordUpdate?.Enabled ?? currentDiscord.Enabled,
+                token,
+                BuildTokenHint(token),
+                NormalizeDiscordId(discordUpdate?.GuildId, currentDiscord.GuildId),
+                NormalizeDiscordId(discordUpdate?.MessagesChannelId, currentDiscord.MessagesChannelId),
+                NormalizeDiscordId(discordUpdate?.VoiceChannelId, currentDiscord.VoiceChannelId),
+                NormalizeDiscordId(discordUpdate?.TrackedUserId, currentDiscord.TrackedUserId),
+                Math.Clamp(discordUpdate?.LatestMessagesCount ?? currentDiscord.LatestMessagesCount, 1, 20),
+                discordUpdate?.FavoriteUserIds is null
+                    ? currentDiscord.FavoriteUserIds
+                    : NormalizeDiscordIds(discordUpdate.FavoriteUserIds));
+
+            _current = new DashboardPreferencesSnapshot(visiblePanels, audio, discord);
+            PersistUnsafe();
+            return _current;
+        }
+    }
+
+    private DashboardPreferencesSnapshot Load(DashboardSettings settings)
+    {
+        var defaults = CreateDefaults(settings);
+        if (!File.Exists(_path))
+        {
+            return defaults;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(_path);
+            var loaded = JsonSerializer.Deserialize<DashboardPreferencesSnapshot>(json, JsonOptions);
+            if (loaded is null)
+            {
+                return defaults;
+            }
+
+            var loadedAudio = loaded.Audio ?? defaults.Audio;
+            var loadedDiscord = loaded.Discord ?? defaults.Discord;
+            return new DashboardPreferencesSnapshot(
+                NormalizePanels(loaded.VisiblePanels, defaults.VisiblePanels),
+                new AudioPreferencesSnapshot(
+                    loadedAudio.IncludeSystemSounds,
+                    Math.Clamp(loadedAudio.MaxSessions, 1, 24),
+                    NormalizeAudioApps(loadedAudio.VisibleSessionMatches)),
+                new DiscordPreferencesSnapshot(
+                    loadedDiscord.Enabled,
+                    loadedDiscord.Token,
+                    BuildTokenHint(loadedDiscord.Token),
+                    NormalizeDiscordId(loadedDiscord.GuildId, defaults.Discord.GuildId),
+                    NormalizeDiscordId(loadedDiscord.MessagesChannelId, defaults.Discord.MessagesChannelId),
+                    NormalizeDiscordId(loadedDiscord.VoiceChannelId, defaults.Discord.VoiceChannelId),
+                    NormalizeDiscordId(loadedDiscord.TrackedUserId, defaults.Discord.TrackedUserId),
+                    Math.Clamp(loadedDiscord.LatestMessagesCount, 1, 20),
+                    NormalizeDiscordIds(loadedDiscord.FavoriteUserIds)));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load dashboard.user.json. Using defaults.");
+            return defaults;
+        }
+    }
+
+    private static DashboardPreferencesSnapshot CreateDefaults(DashboardSettings settings)
+    {
+        return new DashboardPreferencesSnapshot(
+            NormalizePanels(settings.Ui.VisiblePanels, PanelCatalog.Select(panel => panel.Key).ToArray()),
+            new AudioPreferencesSnapshot(
+                settings.Audio.IncludeSystemSounds,
+                Math.Clamp(settings.Audio.MaxSessions, 1, 24),
+                NormalizeAudioApps(settings.Audio.VisibleSessionMatches)),
+            new DiscordPreferencesSnapshot(
+                settings.Discord.Enabled,
+                settings.Discord.Token,
+                BuildTokenHint(settings.Discord.Token),
+                settings.Discord.GuildId == 0 ? string.Empty : settings.Discord.GuildId.ToString(),
+                settings.Discord.MessagesChannelId == 0 ? string.Empty : settings.Discord.MessagesChannelId.ToString(),
+                settings.Discord.VoiceChannelId == 0 ? string.Empty : settings.Discord.VoiceChannelId.ToString(),
+                settings.Discord.TrackedUserId == 0 ? string.Empty : settings.Discord.TrackedUserId.ToString(),
+                Math.Clamp(settings.Discord.LatestMessagesCount, 1, 20),
+                settings.Discord.FavoriteUserIds.Select(id => id.ToString()).ToArray()));
+    }
+
+    private void PersistUnsafe()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_current, JsonOptions);
+            File.WriteAllText(_path, json);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist dashboard.user.json.");
+        }
+    }
+
+    private static string[] NormalizePanels(IEnumerable<string> candidatePanels, IEnumerable<string> fallback)
+    {
+        var allowed = new HashSet<string>(PanelCatalog.Select(panel => panel.Key), StringComparer.OrdinalIgnoreCase);
+        var normalized = candidatePanels
+            .Where(panel => !string.IsNullOrWhiteSpace(panel))
+            .Select(panel => panel.Trim().ToLowerInvariant())
+            .Where(panel => allowed.Contains(panel))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return normalized.Length > 0
+            ? normalized
+            : fallback
+                .Where(panel => allowed.Contains(panel))
+                .Select(panel => panel.ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+    }
+
+    private static string[] NormalizeAudioApps(IEnumerable<string> matches)
+    {
+        return matches
+            .Where(match => !string.IsNullOrWhiteSpace(match))
+            .Select(match => match.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(match => match, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string NormalizeDiscordId(string? candidate, string fallback)
+    {
+        if (candidate is null)
+        {
+            return fallback;
+        }
+
+        var normalized = new string(candidate.Where(char.IsDigit).ToArray());
+        return normalized;
+    }
+
+    private static string[] NormalizeDiscordIds(IEnumerable<string> ids)
+    {
+        return ids
+            .Select(id => NormalizeDiscordId(id, string.Empty))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static DashboardPreferencesSnapshot SanitizeForEditor(DashboardPreferencesSnapshot current)
+    {
+        return current with
+        {
+            Discord = current.Discord with
+            {
+                Token = string.Empty,
+                TokenHint = BuildTokenHint(current.Discord.Token)
+            }
+        };
+    }
+
+    private static string BuildTokenHint(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = token.Trim();
+        if (trimmed.Length <= 8)
+        {
+            return new string('*', trimmed.Length);
+        }
+
+        return $"{trimmed[..4]}...{trimmed[^4..]}";
+    }
+}

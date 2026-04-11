@@ -1,0 +1,9 @@
+bin/
+obj/
+*.log
+*.err.log
+*.out.log
+.vs/
+.vscode/
+src/Monitor.Server/dashboard.user.json
+src/Monitor.Server/appsettings.Development.json

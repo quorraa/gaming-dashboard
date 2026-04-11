@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>LAN Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <button class="fullscreen-toggle" id="fullscreen-toggle" type="button" aria-label="Toggle fullscreen">⤢</button>
+  <button class="settings-toggle" id="settings-toggle" type="button" aria-label="Open live controls">⚙</button>
+  <div class="settings-backdrop" id="settings-backdrop" hidden></div>
+  <aside class="settings-drawer" id="settings-drawer" aria-hidden="true">
+    <div class="settings-header">
+      <div>
+        <div class="eyebrow">Live Controls</div>
+        <div class="settings-subtitle">Panels, audio scope, and Discord bot setup.</div>
+      </div>
+      <button class="settings-close" id="settings-close" type="button" aria-label="Close live controls">✕</button>
+    </div>
+    <section class="settings-section">
+      <div class="section-title">Panels</div>
+      <div class="toggle-grid" id="settings-panels"></div>
+    </section>
+    <section class="settings-section">
+      <div class="section-title">Audio Slots</div>
+      <div class="settings-range-row">
+        <label class="settings-label" for="settings-max-sessions">Visible mixer rows</label>
+        <div class="settings-range-value" id="settings-max-sessions-value">12</div>
+      </div>
+      <input id="settings-max-sessions" class="settings-range" type="range" min="1" max="16" step="1" value="12">
+      <label class="settings-switch">
+        <input id="settings-include-system" type="checkbox">
+        <span>Include system sounds</span>
+      </label>
+    </section>
+    <section class="settings-section">
+      <div class="settings-row">
+        <div class="section-title">Audio Apps</div>
+        <button class="ghost-button" id="settings-clear-audio" type="button">Show all</button>
+      </div>
+      <div class="settings-subtitle">Select only the apps you want in the mixer. If none are selected, all active apps stay visible.</div>
+      <div class="toggle-grid audio-app-grid" id="settings-audio-apps"></div>
+    </section>
+    <section class="settings-section">
+      <div class="settings-row">
+        <div class="section-title">Discord Bot</div>
+        <button class="ghost-button" id="settings-save-discord" type="button">Apply</button>
+      </div>
+      <div class="settings-subtitle">Bring your own bot. Save here and the panel reconnects without editing files.</div>
+      <label class="settings-switch">
+        <input id="settings-discord-enabled" type="checkbox">
+        <span>Enable Discord panel</span>
+      </label>
+      <div class="settings-form-grid">
+        <label class="settings-field">
+          <span class="settings-field-label">Bot token</span>
+          <input id="settings-discord-token" class="settings-input" type="password" placeholder="Paste bot token">
+          <span class="settings-hint" id="settings-discord-token-hint"></span>
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Guild ID</span>
+          <input id="settings-discord-guild" class="settings-input" type="text" inputmode="numeric" placeholder="Server ID">
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Messages channel ID</span>
+          <input id="settings-discord-messages" class="settings-input" type="text" inputmode="numeric" placeholder="Optional text channel ID">
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Fallback voice channel ID</span>
+          <input id="settings-discord-voice" class="settings-input" type="text" inputmode="numeric" placeholder="Optional fallback voice ID">
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Tracked user ID</span>
+          <input id="settings-discord-tracked-user" class="settings-input" type="text" inputmode="numeric" placeholder="Your user ID">
+          <span class="settings-hint">Used to auto-follow your current voice channel.</span>
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Latest messages</span>
+          <input id="settings-discord-latest-count" class="settings-input" type="number" min="1" max="20" step="1">
+        </label>
+        <label class="settings-field settings-field-full">
+          <span class="settings-field-label">Favorite user IDs</span>
+          <textarea id="settings-discord-favorites" class="settings-input settings-textarea" rows="4" placeholder="One user ID per line"></textarea>
+          <span class="settings-hint">Shown in the Favorites block. One ID per line.</span>
+        </label>
+      </div>
+    </section>
+  </aside>
+  <div class="dashboard-viewport" id="dashboard-viewport">
+    <main class="dashboard" id="dashboard">
+      <section class="panel panel-temps" data-panel="temps">
+        <header class="panel-header">
+          <span class="eyebrow">Hardware Temperatures</span>
+        </header>
+        <div class="temp-grid" id="temps-grid"></div>
+        <div class="warning-text" id="temps-warning"></div>
+      </section>
+
+      <section class="panel panel-network" data-panel="network">
+        <header class="panel-header">
+          <span class="eyebrow">Network</span>
+        </header>
+        <div class="metric-row">
+          <div class="metric-block">
+            <div class="metric-value" id="download-value">0</div>
+            <div class="metric-label">Mbps down</div>
+          </div>
+          <div class="metric-block">
+            <div class="metric-value" id="upload-value">0</div>
+            <div class="metric-label">Mbps up</div>
+          </div>
+        </div>
+        <div class="metric-row compact">
+          <div class="metric-block">
+            <div class="metric-value small" id="ping-value">--</div>
+            <div class="metric-label">Ping</div>
+          </div>
+          <div class="metric-block">
+            <div class="metric-value small" id="jitter-value">--</div>
+            <div class="metric-label">Jitter</div>
+          </div>
+        </div>
+        <div class="sparkline-wrap">
+          <svg class="sparkline" viewBox="0 0 300 74" preserveAspectRatio="none">
+            <polyline id="download-line" class="sparkline-line down" points=""></polyline>
+            <polyline id="upload-line" class="sparkline-line up" points=""></polyline>
+          </svg>
+        </div>
+      </section>
+
+      <section class="panel panel-discord" id="discord-panel" data-panel="discord">
+        <header class="panel-header">
+          <span class="eyebrow">Discord</span>
+          <span class="panel-state discord-state" id="discord-state" aria-label="Discord status"></span>
+        </header>
+        <div class="discord-track" id="tracked-user"></div>
+        <div class="discord-sections">
+          <div class="discord-block" id="voice-block">
+            <div class="discord-section-title">Voice</div>
+            <div class="discord-list" id="voice-channel"></div>
+          </div>
+          <div class="discord-block" id="favorites-block">
+            <div class="discord-section-title">Favorites</div>
+            <div class="discord-list" id="favorites-list"></div>
+          </div>
+          <div class="discord-block" id="messages-block">
+            <div class="discord-section-title">Latest</div>
+            <div class="discord-list" id="messages-list"></div>
+          </div>
+        </div>
+        <div class="warning-text" id="discord-warning"></div>
+      </section>
+
+      <section class="panel panel-audio" data-panel="audio">
+        <header class="panel-header">
+          <span class="eyebrow">Audio Mixer</span>
+        </header>
+        <div class="audio-list" id="audio-list"></div>
+        <div class="warning-text" id="audio-warning"></div>
+      </section>
+
+      <section class="panel panel-processes" data-panel="processes">
+        <header class="panel-header">
+          <span class="eyebrow">Processes</span>
+        </header>
+        <div id="processes-list"></div>
+      </section>
+
+      <section class="panel panel-system" data-panel="system">
+        <header class="panel-header">
+          <span class="eyebrow">System Info</span>
+        </header>
+        <dl class="system-list" id="system-list"></dl>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
