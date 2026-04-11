@@ -93,25 +93,29 @@ public sealed class AudioMixerService(DashboardPreferencesStore preferencesStore
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-            var sessions = device.AudioSessionManager.Sessions;
-
-            for (var index = 0; index < sessions.Count; index++)
+            foreach (var device in EnumerateRenderDevices(enumerator))
             {
-                using var session = sessions[index];
-                if (session is null)
+                using (device)
                 {
-                    continue;
-                }
+                    var sessions = device.AudioSessionManager.Sessions;
+                    for (var index = 0; index < sessions.Count; index++)
+                    {
+                        using var session = sessions[index];
+                        if (session is null)
+                        {
+                            continue;
+                        }
 
-                var processId = (int)session.GetProcessID;
-                if (!string.Equals(ResolveSessionId(session, processId), sessionId, StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                        var processId = (int)session.GetProcessID;
+                        if (!string.Equals(ResolveSessionId(device, session, processId), sessionId, StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
 
-                apply(session);
-                changed = true;
+                        apply(session);
+                        changed = true;
+                    }
+                }
             }
         }
         catch
@@ -150,32 +154,39 @@ public sealed class AudioMixerService(DashboardPreferencesStore preferencesStore
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-            var sessions = device.AudioSessionManager.Sessions;
+            using var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
 
             var rawSessions = new List<RawAudioSession>();
-            for (var index = 0; index < sessions.Count; index++)
+            foreach (var device in EnumerateRenderDevices(enumerator))
             {
-                using var session = sessions[index];
-                if (session is null)
+                using (device)
                 {
-                    continue;
-                }
+                    var sessions = device.AudioSessionManager.Sessions;
+                    for (var index = 0; index < sessions.Count; index++)
+                    {
+                        using var session = sessions[index];
+                        if (session is null)
+                        {
+                            continue;
+                        }
 
-                var processId = (int)session.GetProcessID;
-                if (processId == 0)
-                {
-                    continue;
-                }
+                        var processId = (int)session.GetProcessID;
+                        if (processId == 0)
+                        {
+                            continue;
+                        }
 
-                var name = ResolveSessionName(session, processId);
-                rawSessions.Add(new RawAudioSession(
-                    ResolveSessionId(session, processId),
-                    name,
-                    processId,
-                    (int)Math.Round(session.SimpleAudioVolume.Volume * 100),
-                    session.SimpleAudioVolume.Mute,
-                    false));
+                        var name = ResolveSessionName(session, processId);
+                        rawSessions.Add(new RawAudioSession(
+                            ResolveSessionId(device, session, processId),
+                            name,
+                            processId,
+                            ResolveEndpointName(device),
+                            (int)Math.Round(session.SimpleAudioVolume.Volume * 100),
+                            session.SimpleAudioVolume.Mute,
+                            false));
+                    }
+                }
             }
 
             cards =
@@ -184,9 +195,9 @@ public sealed class AudioMixerService(DashboardPreferencesStore preferencesStore
                     MasterOutputSessionId,
                     "System Audio",
                     0,
-                    "master",
-                    (int)Math.Round(device.AudioEndpointVolume.MasterVolumeLevelScalar * 100),
-                    device.AudioEndpointVolume.Mute,
+                    ResolveEndpointName(defaultDevice),
+                    (int)Math.Round(defaultDevice.AudioEndpointVolume.MasterVolumeLevelScalar * 100),
+                    defaultDevice.AudioEndpointVolume.Mute,
                     true),
                 .. rawSessions
                 .GroupBy(session => session.Id, StringComparer.Ordinal)
@@ -204,7 +215,7 @@ public sealed class AudioMixerService(DashboardPreferencesStore preferencesStore
                         primary.Id,
                         primary.Name,
                         distinctPids.FirstOrDefault(),
-                        BuildDetailLabel(primary.IsSystemSound, distinctPids, orderedGroup.Length),
+                        BuildDetailLabel(primary.IsSystemSound, distinctPids, orderedGroup.Length, primary.EndpointName),
                         orderedGroup.Max(item => item.VolumePercent),
                         orderedGroup.All(item => item.IsMuted),
                         primary.IsSystemSound);
@@ -286,30 +297,41 @@ public sealed class AudioMixerService(DashboardPreferencesStore preferencesStore
         }
     }
 
-    private static string ResolveSessionId(AudioSessionControl session, int processId)
+    private static string ResolveSessionId(MMDevice device, AudioSessionControl session, int processId)
     {
         var identifier = session.GetSessionIdentifier;
-        return string.IsNullOrWhiteSpace(identifier) ? $"pid:{processId}" : identifier;
+        var sessionKey = string.IsNullOrWhiteSpace(identifier) ? $"pid:{processId}" : identifier;
+        return $"{device.ID}|{sessionKey}";
     }
 
-    private static string BuildDetailLabel(bool isSystemSound, IReadOnlyList<int> distinctPids, int sessionCount)
+    private static string BuildDetailLabel(bool isSystemSound, IReadOnlyList<int> distinctPids, int sessionCount, string endpointName)
     {
         if (isSystemSound)
         {
-            return "system";
+            return endpointName;
         }
 
         if (distinctPids.Count == 1)
         {
-            return $"pid {distinctPids[0]}";
+            return $"{endpointName} · pid {distinctPids[0]}";
         }
 
         if (distinctPids.Count > 1)
         {
-            return $"{distinctPids.Count} pids";
+            return $"{endpointName} · {distinctPids.Count} pids";
         }
 
-        return sessionCount > 1 ? $"{sessionCount} sessions" : "live";
+        return sessionCount > 1 ? $"{endpointName} · {sessionCount} sessions" : endpointName;
+    }
+
+    private static IEnumerable<MMDevice> EnumerateRenderDevices(MMDeviceEnumerator enumerator)
+    {
+        return enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).Cast<MMDevice>();
+    }
+
+    private static string ResolveEndpointName(MMDevice device)
+    {
+        return string.IsNullOrWhiteSpace(device.FriendlyName) ? device.ID : device.FriendlyName;
     }
 
     private static bool IsSpotifyProcess(global::System.Diagnostics.Process process)
@@ -334,6 +356,7 @@ public sealed class AudioMixerService(DashboardPreferencesStore preferencesStore
         string Id,
         string Name,
         int ProcessId,
+        string EndpointName,
         int VolumePercent,
         bool IsMuted,
         bool IsSystemSound);
