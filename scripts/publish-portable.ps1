@@ -17,6 +17,18 @@ $publishRoot = Join-Path $OutputRoot "publish"
 $publishDir = Join-Path $publishRoot "$Runtime-$Configuration"
 $zipPath = Join-Path $OutputRoot "gaming-dashboard-$Runtime-$Configuration.zip"
 
+Write-Host "Building Studio frontend"
+Push-Location $repoRoot
+try {
+    & npm run build:studio
+    if ($LASTEXITCODE -ne 0) {
+        throw "npm run build:studio failed with exit code $LASTEXITCODE."
+    }
+}
+finally {
+    Pop-Location
+}
+
 if (Test-Path $publishDir) {
     Remove-Item $publishDir -Recurse -Force
 }

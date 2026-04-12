@@ -6,6 +6,8 @@ artifacts/
 *.out.log
 .vs/
 .vscode/
+node_modules/
+src/StudioClient/dist/
 src/Monitor.Server/dashboard.user.json
 src/Monitor.Server/appsettings.Development.json
 *.csproj.user
