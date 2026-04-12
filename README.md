@@ -35,6 +35,11 @@ dotnet run --project .\src\Monitor.Server
 
 Then open `http://<gaming-pc-lan-ip>:5103`.
 
+Client routes:
+
+- `http://<gaming-pc-lan-ip>:5103/studio/` for the richer Studio client
+- `http://<gaming-pc-lan-ip>:5103/vanilla/` for the dependency-less Vanilla client
+
 ## Dashboard Discord settings
 
 Open the dashboard `⚙` drawer and fill the `Discord Relay` section.
@@ -53,6 +58,19 @@ Optional:
 - `Favorite user IDs`
 
 The local dashboard no longer needs a Discord bot token.
+
+User preferences are stored outside the app folder so portable updates do not wipe them:
+
+```text
+%LocalAppData%\GamingDashboard\dashboard.user.json
+```
+
+On first run, the app will migrate any legacy `dashboard.user.json` from the old app directory into that location.
+
+Studio theme media:
+
+- local image/video wallpapers are uploaded to the gaming PC and cached by the Studio service worker on the viewing device
+- Pexels photo/video search is available in Studio after saving a Pexels API key locally
 
 ## Relay configuration
 

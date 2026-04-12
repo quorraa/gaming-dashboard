@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/vanilla/styles.css">
 </head>
 <body>
   <button class="fullscreen-toggle" id="fullscreen-toggle" type="button" aria-label="Toggle fullscreen">⤢</button>
@@ -116,6 +116,35 @@
         </label>
       </div>
     </section>
+    <section class="settings-section">
+      <div class="settings-row">
+        <div class="section-title">Spotify</div>
+        <div class="settings-inline-actions">
+          <button class="ghost-button" id="settings-save-spotify" type="button">Apply</button>
+          <button class="ghost-button" id="settings-connect-spotify" type="button">Connect</button>
+          <button class="ghost-button" id="settings-disconnect-spotify" type="button">Disconnect</button>
+        </div>
+      </div>
+      <div class="settings-subtitle">Use your Spotify app client ID to authorize playback controls. Most playback commands require Spotify Premium.</div>
+      <label class="settings-switch">
+        <input id="settings-spotify-enabled" type="checkbox">
+        <span>Enable Spotify panel</span>
+      </label>
+      <div class="settings-form-grid">
+        <label class="settings-field">
+          <span class="settings-field-label">Client ID</span>
+          <input id="settings-spotify-client-id" class="settings-input" type="text" placeholder="Spotify app client ID">
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Redirect URI</span>
+          <input id="settings-spotify-redirect-uri" class="settings-input" type="text" readonly>
+        </label>
+        <label class="settings-field settings-field-full">
+          <span class="settings-field-label">Status</span>
+          <input id="settings-spotify-status" class="settings-input" type="text" readonly>
+        </label>
+      </div>
+    </section>
   </aside>
   <div class="dashboard-viewport" id="dashboard-viewport">
     <main class="dashboard" id="dashboard">
@@ -182,6 +211,15 @@
         <div class="warning-text" id="discord-warning"></div>
       </section>
 
+      <section class="panel panel-spotify" id="spotify-panel" data-panel="spotify">
+        <header class="panel-header">
+          <span class="eyebrow">Spotify</span>
+          <span class="panel-state spotify-state" id="spotify-state" aria-label="Spotify status"></span>
+        </header>
+        <div class="spotify-card" id="spotify-card"></div>
+        <div class="warning-text" id="spotify-warning"></div>
+      </section>
+
       <section class="panel panel-audio" data-panel="audio">
         <header class="panel-header">
           <span class="eyebrow">Audio Mixer</span>
@@ -211,6 +249,6 @@
     </main>
   </div>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/vanilla/app.js"></script>
 </body>
 </html>

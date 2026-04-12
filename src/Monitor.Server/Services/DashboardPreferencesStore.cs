@@ -6,6 +6,8 @@ namespace Monitor.Server.Services;
 
 public sealed class DashboardPreferencesStore
 {
+    private const string AppDataFolderName = "GamingDashboard";
+    private const string PreferencesFileName = "dashboard.user.json";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -16,6 +18,7 @@ public sealed class DashboardPreferencesStore
         new("temps", "Temps"),
         new("network", "Network"),
         new("discord", "Discord"),
+        new("spotify", "Spotify"),
         new("audio", "Audio"),
         new("processes", "Processes"),
         new("system", "System")
@@ -32,7 +35,8 @@ public sealed class DashboardPreferencesStore
         ILogger<DashboardPreferencesStore> logger)
     {
         _logger = logger;
-        _path = Path.Combine(environment.ContentRootPath, "dashboard.user.json");
+        _path = ResolvePreferencesPath(environment);
+        TryMigrateLegacyPreferences(environment.ContentRootPath, _path);
         _current = Load(settings);
     }
 
@@ -94,13 +98,77 @@ public sealed class DashboardPreferencesStore
                     ? currentDiscord.FavoriteUserIds
                     : NormalizeDiscordIds(discordUpdate.FavoriteUserIds));
 
+            var spotifyUpdate = update.Spotify;
+            var currentSpotify = _current.Spotify;
+            var nextSpotifyClientId = spotifyUpdate?.ClientId?.Trim() ?? currentSpotify.ClientId;
+            var spotifyRefreshToken = currentSpotify.RefreshToken;
+            if (spotifyUpdate?.ClientId is not null
+                && !string.Equals(nextSpotifyClientId, currentSpotify.ClientId, StringComparison.Ordinal))
+            {
+                spotifyRefreshToken = string.Empty;
+            }
+
+            var spotify = new SpotifyPreferencesSnapshot(
+                spotifyUpdate?.Enabled ?? currentSpotify.Enabled,
+                nextSpotifyClientId,
+                spotifyRefreshToken,
+                !string.IsNullOrWhiteSpace(spotifyRefreshToken));
+
             var layout = update.Layout is null
                 ? _current.Layout
                 : MergeLayoutPreferences(_current.Layout, update.Layout);
 
-            _current = new DashboardPreferencesSnapshot(visiblePanels, audio, discord, layout);
+            var themeUpdate = update.Theme;
+            var currentTheme = _current.Theme;
+            var pexelsApiKey = themeUpdate?.PexelsApiKey switch
+            {
+                null => currentTheme.PexelsApiKey,
+                _ => themeUpdate.PexelsApiKey.Trim()
+            };
+            var theme = new ThemePreferencesSnapshot(
+                NormalizeThemePreset(themeUpdate?.PresetId, currentTheme.PresetId),
+                pexelsApiKey,
+                BuildSecretHint(pexelsApiKey),
+                themeUpdate?.Background is null
+                    ? currentTheme.Background
+                    : NormalizeThemeBackground(currentTheme.Background, themeUpdate.Background));
+
+            _current = new DashboardPreferencesSnapshot(visiblePanels, audio, discord, spotify, layout, theme);
             PersistUnsafe();
             return _current;
+        }
+    }
+
+    public void SetSpotifyAuthorization(string refreshToken)
+    {
+        lock (_lock)
+        {
+            var trimmed = refreshToken.Trim();
+            _current = _current with
+            {
+                Spotify = _current.Spotify with
+                {
+                    RefreshToken = trimmed,
+                    IsAuthorized = !string.IsNullOrWhiteSpace(trimmed)
+                }
+            };
+            PersistUnsafe();
+        }
+    }
+
+    public void ClearSpotifyAuthorization()
+    {
+        lock (_lock)
+        {
+            _current = _current with
+            {
+                Spotify = _current.Spotify with
+                {
+                    RefreshToken = string.Empty,
+                    IsAuthorized = false
+                }
+            };
+            PersistUnsafe();
         }
     }
 
@@ -123,6 +191,7 @@ public sealed class DashboardPreferencesStore
 
             var loadedAudio = loaded.Audio ?? defaults.Audio;
             var loadedDiscord = loaded.Discord ?? defaults.Discord;
+            var loadedSpotify = loaded.Spotify ?? defaults.Spotify;
             return new DashboardPreferencesSnapshot(
                 NormalizePanels(loaded.VisiblePanels, defaults.VisiblePanels),
                 new AudioPreferencesSnapshot(
@@ -141,7 +210,13 @@ public sealed class DashboardPreferencesStore
                     NormalizeDiscordId(loadedDiscord.TrackedUserId, defaults.Discord.TrackedUserId),
                     Math.Clamp(loadedDiscord.LatestMessagesCount, 1, 20),
                     NormalizeDiscordIds(loadedDiscord.FavoriteUserIds)),
-                NormalizeLayoutPreferences(loaded.Layout, defaults.Layout));
+                new SpotifyPreferencesSnapshot(
+                    loadedSpotify.Enabled,
+                    loadedSpotify.ClientId?.Trim() ?? defaults.Spotify.ClientId,
+                    loadedSpotify.RefreshToken?.Trim() ?? string.Empty,
+                    !string.IsNullOrWhiteSpace(loadedSpotify.RefreshToken)),
+                NormalizeLayoutPreferences(loaded.Layout, defaults.Layout),
+                NormalizeThemePreferences(loaded.Theme, defaults.Theme));
         }
         catch (Exception ex)
         {
@@ -170,13 +245,24 @@ public sealed class DashboardPreferencesStore
                 settings.Discord.TrackedUserId == 0 ? string.Empty : settings.Discord.TrackedUserId.ToString(),
                 Math.Clamp(settings.Discord.LatestMessagesCount, 1, 20),
                 settings.Discord.FavoriteUserIds.Select(id => id.ToString()).ToArray()),
-            DashboardLayoutPreferencesSnapshot.Default);
+            new SpotifyPreferencesSnapshot(
+                settings.Spotify.Enabled,
+                settings.Spotify.ClientId?.Trim() ?? string.Empty,
+                string.Empty,
+                false),
+            DashboardLayoutPreferencesSnapshot.Default,
+            new ThemePreferencesSnapshot(
+                NormalizeThemePreset(settings.Theme.DefaultPresetId, ThemePreferencesSnapshot.Default.PresetId),
+                settings.Theme.PexelsApiKey,
+                BuildSecretHint(settings.Theme.PexelsApiKey),
+                ThemeBackgroundSnapshot.Empty));
     }
 
     private void PersistUnsafe()
     {
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             var json = JsonSerializer.Serialize(_current, JsonOptions);
             File.WriteAllText(_path, json);
         }
@@ -250,6 +336,22 @@ public sealed class DashboardPreferencesStore
             NormalizeLayoutMode(candidate.PhoneLandscape, fallback.PhoneLandscape));
     }
 
+    private static ThemePreferencesSnapshot NormalizeThemePreferences(
+        ThemePreferencesSnapshot? candidate,
+        ThemePreferencesSnapshot fallback)
+    {
+        if (candidate is null)
+        {
+            return fallback;
+        }
+
+        return new ThemePreferencesSnapshot(
+            NormalizeThemePreset(candidate.PresetId, fallback.PresetId),
+            candidate.PexelsApiKey?.Trim() ?? fallback.PexelsApiKey,
+            BuildSecretHint(candidate.PexelsApiKey?.Trim() ?? fallback.PexelsApiKey),
+            NormalizeThemeBackgroundSnapshot(candidate.Background));
+    }
+
     private static DashboardLayoutPreferencesSnapshot MergeLayoutPreferences(
         DashboardLayoutPreferencesSnapshot current,
         DashboardLayoutPreferencesUpdate update)
@@ -293,13 +395,66 @@ public sealed class DashboardPreferencesStore
             return defaults;
         }
 
-        var columns = Math.Clamp(update.Columns ?? current.Columns, 1, 24);
-        var rows = Math.Clamp(update.Rows ?? current.Rows, 1, 24);
+        var hasViewportOverride = !string.IsNullOrWhiteSpace(update.ViewportKey)
+            && update.ViewportWidth.GetValueOrDefault() > 0
+            && update.ViewportHeight.GetValueOrDefault() > 0;
+
+        if (hasViewportOverride)
+        {
+            var variants = MergeLayoutVariants(current, update, defaults);
+            return NormalizeLayoutMode(current with { Variants = variants }, defaults);
+        }
+
+        var columns = Math.Clamp(update.Columns ?? current.Columns, 1, 120);
+        var rows = Math.Clamp(update.Rows ?? current.Rows, 1, 120);
         var panels = update.Panels is null
             ? current.Panels
             : MergePanelLayouts(current.Panels, update.Panels, columns, rows);
+        var dock = MergeDock(current.Dock ?? DashboardFloatingDockSnapshot.Default, update.Dock);
 
-        return NormalizeLayoutMode(new DashboardLayoutModeSnapshot(columns, rows, panels), defaults);
+        return NormalizeLayoutMode(new DashboardLayoutModeSnapshot(columns, rows, panels, dock, current.Variants), defaults);
+    }
+
+    private static DashboardLayoutVariantSnapshot[] MergeLayoutVariants(
+        DashboardLayoutModeSnapshot current,
+        DashboardLayoutPreferencesUpdate update,
+        DashboardLayoutModeSnapshot defaults)
+    {
+        var viewportKey = update.ViewportKey!.Trim();
+        var variants = (current.Variants ?? [])
+            .ToDictionary(variant => variant.ViewportKey, StringComparer.OrdinalIgnoreCase);
+
+        var currentVariant = variants.TryGetValue(viewportKey, out var existing)
+            ? existing
+            : new DashboardLayoutVariantSnapshot(
+                viewportKey,
+                update.ViewportWidth!.Value,
+                update.ViewportHeight!.Value,
+                current.Columns,
+                current.Rows,
+                current.Panels,
+                current.Dock ?? DashboardFloatingDockSnapshot.Default);
+
+        var columns = Math.Clamp(update.Columns ?? currentVariant.Columns, 1, 120);
+        var rows = Math.Clamp(update.Rows ?? currentVariant.Rows, 1, 120);
+        var panels = update.Panels is null
+            ? currentVariant.Panels
+            : MergePanelLayouts(currentVariant.Panels, update.Panels, columns, rows);
+        var dock = MergeDock(currentVariant.Dock, update.Dock);
+
+        variants[viewportKey] = NormalizeLayoutVariant(new DashboardLayoutVariantSnapshot(
+            viewportKey,
+            update.ViewportWidth!.Value,
+            update.ViewportHeight!.Value,
+            columns,
+            rows,
+            panels,
+            dock), defaults);
+
+        return variants.Values
+            .OrderBy(item => item.ViewportWidth)
+            .ThenBy(item => item.ViewportHeight)
+            .ToArray();
     }
 
     private static DashboardPanelLayoutSnapshot[] MergePanelLayouts(
@@ -320,7 +475,14 @@ public sealed class DashboardPreferencesStore
             var y = ClampPosition(update.Y ?? existing.Y, rows);
             var w = ClampSpan(update.W ?? existing.W, columns, x);
             var h = ClampSpan(update.H ?? existing.H, rows, y);
-            byKey[update.Key] = existing with { X = x, Y = y, W = w, H = h };
+            byKey[update.Key] = existing with
+            {
+                X = x,
+                Y = y,
+                W = w,
+                H = h,
+                Locked = update.Locked ?? existing.Locked
+            };
         }
 
         return PanelCatalog
@@ -339,8 +501,8 @@ public sealed class DashboardPreferencesStore
             return fallback;
         }
 
-        var columns = Math.Clamp(candidate.Columns, 1, 24);
-        var rows = Math.Clamp(candidate.Rows, 1, 24);
+        var columns = Math.Clamp(candidate.Columns, 1, 120);
+        var rows = Math.Clamp(candidate.Rows, 1, 120);
         var source = candidate.Panels?.ToDictionary(panel => panel.Key, StringComparer.OrdinalIgnoreCase)
             ?? new Dictionary<string, DashboardPanelLayoutSnapshot>(StringComparer.OrdinalIgnoreCase);
 
@@ -358,7 +520,82 @@ public sealed class DashboardPreferencesStore
             return layout with { Key = panel.Key, X = x, Y = y, W = w, H = h };
         }).ToArray();
 
-        return new DashboardLayoutModeSnapshot(columns, rows, panels);
+        var dock = NormalizeDock(candidate.Dock, fallback.Dock ?? DashboardFloatingDockSnapshot.Default);
+        var variants = NormalizeLayoutVariants(candidate.Variants, fallback, dock);
+
+        return new DashboardLayoutModeSnapshot(columns, rows, panels, dock, variants);
+    }
+
+    private static DashboardLayoutVariantSnapshot[] NormalizeLayoutVariants(
+        IReadOnlyList<DashboardLayoutVariantSnapshot>? candidates,
+        DashboardLayoutModeSnapshot fallback,
+        DashboardFloatingDockSnapshot fallbackDock)
+    {
+        if (candidates is null || candidates.Count == 0)
+        {
+            return [];
+        }
+
+        return candidates
+            .Where(item => !string.IsNullOrWhiteSpace(item.ViewportKey) && item.ViewportWidth > 0 && item.ViewportHeight > 0)
+            .Select(item => NormalizeLayoutVariant(item, fallback with { Dock = fallbackDock }))
+            .GroupBy(item => item.ViewportKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .OrderBy(item => item.ViewportWidth)
+            .ThenBy(item => item.ViewportHeight)
+            .ToArray();
+    }
+
+    private static DashboardLayoutVariantSnapshot NormalizeLayoutVariant(
+        DashboardLayoutVariantSnapshot candidate,
+        DashboardLayoutModeSnapshot fallback)
+    {
+        var normalizedMode = NormalizeLayoutMode(new DashboardLayoutModeSnapshot(
+            candidate.Columns,
+            candidate.Rows,
+            candidate.Panels,
+            candidate.Dock), fallback);
+
+        return new DashboardLayoutVariantSnapshot(
+            candidate.ViewportKey.Trim(),
+            Math.Max(1, candidate.ViewportWidth),
+            Math.Max(1, candidate.ViewportHeight),
+            normalizedMode.Columns,
+            normalizedMode.Rows,
+            normalizedMode.Panels,
+            normalizedMode.Dock ?? DashboardFloatingDockSnapshot.Default);
+    }
+
+    private static DashboardFloatingDockSnapshot MergeDock(
+        DashboardFloatingDockSnapshot current,
+        DashboardFloatingDockUpdate? update)
+    {
+        if (update is null)
+        {
+            return current;
+        }
+
+        return NormalizeDock(new DashboardFloatingDockSnapshot(
+            update.X ?? current.X,
+            update.Y ?? current.Y,
+            update.Locked ?? current.Locked,
+            update.Orientation?.Trim().ToLowerInvariant() ?? current.Orientation), current);
+    }
+
+    private static DashboardFloatingDockSnapshot NormalizeDock(
+        DashboardFloatingDockSnapshot? candidate,
+        DashboardFloatingDockSnapshot fallback)
+    {
+        if (candidate is null)
+        {
+            return fallback;
+        }
+
+        return new DashboardFloatingDockSnapshot(
+            Math.Max(0, candidate.X),
+            Math.Max(0, candidate.Y),
+            candidate.Locked,
+            candidate.Orientation is "vertical" ? "vertical" : "horizontal");
     }
 
     private static int ClampPosition(int value, int max) => Math.Clamp(value, 1, max);
@@ -375,6 +612,85 @@ public sealed class DashboardPreferencesStore
         };
     }
 
+    private static string NormalizeThemePreset(string? presetId, string fallback)
+    {
+        var normalized = presetId?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized)
+            ? fallback
+            : normalized;
+    }
+
+    private static ThemeBackgroundSnapshot NormalizeThemeBackground(
+        ThemeBackgroundSnapshot current,
+        ThemeBackgroundUpdate? update)
+    {
+        if (update is null)
+        {
+            return current;
+        }
+
+        var source = NormalizeThemeSource(update.Source, current.Source);
+        var mediaKind = NormalizeThemeMediaKind(update.MediaKind, current.MediaKind);
+        if (source == "none")
+        {
+            return ThemeBackgroundSnapshot.Empty;
+        }
+
+        return new ThemeBackgroundSnapshot(
+            source,
+            mediaKind,
+            update.AssetId?.Trim() ?? current.AssetId,
+            update.Label?.Trim() ?? current.Label,
+            update.RenderUrl?.Trim() ?? current.RenderUrl,
+            update.PreviewUrl?.Trim() ?? current.PreviewUrl,
+            update.Attribution?.Trim() ?? current.Attribution,
+            update.AttributionUrl?.Trim() ?? current.AttributionUrl);
+    }
+
+    private static ThemeBackgroundSnapshot NormalizeThemeBackgroundSnapshot(ThemeBackgroundSnapshot? candidate)
+    {
+        if (candidate is null)
+        {
+            return ThemeBackgroundSnapshot.Empty;
+        }
+
+        var source = NormalizeThemeSource(candidate.Source, "none");
+        if (source == "none")
+        {
+            return ThemeBackgroundSnapshot.Empty;
+        }
+
+        return new ThemeBackgroundSnapshot(
+            source,
+            NormalizeThemeMediaKind(candidate.MediaKind, "none"),
+            candidate.AssetId?.Trim() ?? string.Empty,
+            candidate.Label?.Trim() ?? string.Empty,
+            candidate.RenderUrl?.Trim() ?? string.Empty,
+            candidate.PreviewUrl?.Trim() ?? string.Empty,
+            candidate.Attribution?.Trim() ?? string.Empty,
+            candidate.AttributionUrl?.Trim() ?? string.Empty);
+    }
+
+    private static string NormalizeThemeSource(string? source, string fallback)
+    {
+        var normalized = source?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "none" or "local" or "pexels-photo" or "pexels-video" => normalized,
+            _ => fallback
+        };
+    }
+
+    private static string NormalizeThemeMediaKind(string? mediaKind, string fallback)
+    {
+        var normalized = mediaKind?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "image" or "video" or "none" => normalized,
+            _ => fallback
+        };
+    }
+
     private static DashboardPreferencesSnapshot SanitizeForEditor(DashboardPreferencesSnapshot current)
     {
         return current with
@@ -383,6 +699,15 @@ public sealed class DashboardPreferencesStore
             {
                 ApiKey = string.Empty,
                 ApiKeyHint = BuildSecretHint(current.Discord.ApiKey)
+            },
+            Spotify = current.Spotify with
+            {
+                RefreshToken = string.Empty
+            },
+            Theme = current.Theme with
+            {
+                PexelsApiKey = string.Empty,
+                PexelsApiKeyHint = BuildSecretHint(current.Theme.PexelsApiKey)
             }
         };
     }
@@ -401,5 +726,40 @@ public sealed class DashboardPreferencesStore
         }
 
         return $"{trimmed[..4]}...{trimmed[^4..]}";
+    }
+
+    private static string ResolvePreferencesPath(IHostEnvironment environment)
+    {
+        var appDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(appDataRoot))
+        {
+            return Path.Combine(environment.ContentRootPath, PreferencesFileName);
+        }
+
+        return Path.Combine(appDataRoot, AppDataFolderName, PreferencesFileName);
+    }
+
+    private void TryMigrateLegacyPreferences(string legacyRoot, string targetPath)
+    {
+        try
+        {
+            if (File.Exists(targetPath))
+            {
+                return;
+            }
+
+            var legacyPath = Path.Combine(legacyRoot, PreferencesFileName);
+            if (!File.Exists(legacyPath))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.Copy(legacyPath, targetPath, overwrite: false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to migrate legacy dashboard preferences.");
+        }
     }
 }

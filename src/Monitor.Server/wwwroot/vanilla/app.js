@@ -5,6 +5,9 @@ const state = {
   latestSnapshot: null,
   settings: null,
   settingsSaveTimer: null,
+  spotifyProgressTimer: null,
+  spotifySeekTimer: null,
+  spotifyVolumeTimer: null,
   audioRows: 1,
   audioOptimistic: new Map(),
   audioDraggingSessionId: null,
@@ -48,6 +51,13 @@ const elements = {
   settingsDiscordTrackedUser: document.getElementById("settings-discord-tracked-user"),
   settingsDiscordLatestCount: document.getElementById("settings-discord-latest-count"),
   settingsDiscordFavorites: document.getElementById("settings-discord-favorites"),
+  settingsSaveSpotify: document.getElementById("settings-save-spotify"),
+  settingsConnectSpotify: document.getElementById("settings-connect-spotify"),
+  settingsDisconnectSpotify: document.getElementById("settings-disconnect-spotify"),
+  settingsSpotifyEnabled: document.getElementById("settings-spotify-enabled"),
+  settingsSpotifyClientId: document.getElementById("settings-spotify-client-id"),
+  settingsSpotifyRedirectUri: document.getElementById("settings-spotify-redirect-uri"),
+  settingsSpotifyStatus: document.getElementById("settings-spotify-status"),
   panels: Array.from(document.querySelectorAll("[data-panel]")),
   tempsGrid: document.getElementById("temps-grid"),
   tempsWarning: document.getElementById("temps-warning"),
@@ -67,6 +77,10 @@ const elements = {
   voiceChannel: document.getElementById("voice-channel"),
   messagesList: document.getElementById("messages-list"),
   discordWarning: document.getElementById("discord-warning"),
+  spotifyPanel: document.getElementById("spotify-panel"),
+  spotifyState: document.getElementById("spotify-state"),
+  spotifyCard: document.getElementById("spotify-card"),
+  spotifyWarning: document.getElementById("spotify-warning"),
   audioPanel: document.querySelector(".panel-audio"),
   audioDevicePicker: document.getElementById("audio-device-picker"),
   audioDevicePickerMeasure: document.getElementById("audio-device-picker-measure"),
@@ -167,6 +181,28 @@ function bindUi() {
       discord: collectDiscordUpdate()
     });
   });
+  elements.settingsSaveSpotify.addEventListener("click", () => {
+    saveSettings({
+      spotify: collectSpotifyUpdate()
+    });
+  });
+  elements.settingsConnectSpotify.addEventListener("click", async () => {
+    if (!elements.settingsSpotifyClientId.value.trim()) {
+      elements.settingsSpotifyStatus.value = "Client ID required";
+      return;
+    }
+    await saveSettings({
+      spotify: collectSpotifyUpdate()
+    });
+    window.location.href = `/api/spotify/connect/start?returnUrl=${encodeURIComponent(location.pathname)}`;
+  });
+  elements.settingsDisconnectSpotify.addEventListener("click", async () => {
+    await fetch("/api/spotify/disconnect", { method: "POST" });
+    const settingsResponse = await fetch("/api/settings", { cache: "no-store" });
+    if (settingsResponse.ok) {
+      renderSettings(await settingsResponse.json());
+    }
+  });
   elements.audioDevicePicker.addEventListener("change", () => {
     saveSettings({
       audio: {
@@ -174,6 +210,9 @@ function bindUi() {
       }
     });
   });
+  elements.spotifyPanel.addEventListener("click", onSpotifyPanelClick);
+  elements.spotifyPanel.addEventListener("input", onSpotifyPanelInput);
+  elements.spotifyPanel.addEventListener("change", onSpotifyPanelChange);
   updateFullscreenButton();
   syncLayoutEditingUi();
   scheduleFit();
@@ -200,6 +239,7 @@ function render(snapshot) {
   renderTemps(snapshot.temps);
   renderNetwork(snapshot.network);
   renderDiscord(snapshot.discord);
+  renderSpotify(snapshot.spotify);
   pruneAudioOptimisticState(snapshot.audio);
   if (!shouldFreezeAudioRender()) {
     renderAudio(snapshot.audio);
@@ -253,6 +293,16 @@ function renderSettings(editorState) {
   elements.settingsDiscordFavorites.value = Array.isArray(discordPreferences.favoriteUserIds)
     ? discordPreferences.favoriteUserIds.join("\n")
     : "";
+
+  const spotifyPreferences = preferences.spotify ?? {};
+  elements.settingsSpotifyEnabled.checked = Boolean(spotifyPreferences.enabled);
+  elements.settingsSpotifyClientId.value = spotifyPreferences.clientId ?? "";
+  elements.settingsSpotifyRedirectUri.value = `${location.origin}/api/spotify/connect/callback`;
+  elements.settingsSpotifyStatus.value = spotifyPreferences.isAuthorized
+    ? "Connected"
+    : spotifyPreferences.clientId
+      ? "Ready to connect"
+      : "Client ID required";
 }
 
 function renderLayoutEditor(layoutPreferences) {
@@ -390,6 +440,102 @@ function renderDiscord(discord) {
   elements.messagesBlock.hidden = discord.latestMessages.length === 0;
 
   elements.discordWarning.textContent = discord.warning ?? "";
+}
+
+function renderSpotify(spotify) {
+  clearInterval(state.spotifyProgressTimer);
+  state.spotifyProgressTimer = null;
+
+  elements.spotifyPanel.classList.toggle("is-disabled", !spotify.enabled);
+  const stateClass = spotify.enabled
+    ? (spotify.connectionState === "connected" ? "connected" : "warning")
+    : "disabled";
+  elements.spotifyState.className = `panel-state spotify-state state-${stateClass}`;
+  elements.spotifyState.setAttribute("aria-label", `Spotify ${spotify.enabled ? spotify.connectionState : "disabled"}`);
+
+  if (!spotify.enabled) {
+    elements.spotifyCard.innerHTML = "";
+    elements.spotifyWarning.textContent = "";
+    return;
+  }
+
+  const nowPlaying = spotify.nowPlaying;
+  if (!nowPlaying) {
+    elements.spotifyCard.innerHTML = `
+      <div class="spotify-empty">
+        <div class="footer-note">${escapeHtml(spotify.warning ?? "No active Spotify playback.")}</div>
+      </div>
+    `;
+    elements.spotifyWarning.textContent = "";
+    return;
+  }
+
+  const repeatLabel = nowPlaying.repeatState === "track"
+    ? "Repeat One"
+    : nowPlaying.repeatState === "context"
+      ? "Repeat Context"
+      : "Repeat Off";
+
+  elements.spotifyCard.innerHTML = `
+    <div class="spotify-now">
+      <a class="spotify-cover-link" href="${escapeHtml(nowPlaying.trackUrl || "#")}" target="_blank" rel="noreferrer noopener" ${nowPlaying.trackUrl ? "" : 'tabindex="-1" aria-disabled="true"'}>
+        ${nowPlaying.coverUrl
+          ? `<img class="spotify-cover" src="${escapeHtml(nowPlaying.coverUrl)}" alt="${escapeHtml(nowPlaying.title)} album art">`
+          : `<div class="spotify-cover spotify-cover-fallback">♪</div>`}
+      </a>
+      <div class="spotify-meta">
+        <a class="spotify-title-link" href="${escapeHtml(nowPlaying.trackUrl || "#")}" target="_blank" rel="noreferrer noopener" ${nowPlaying.trackUrl ? "" : 'tabindex="-1" aria-disabled="true"'}>${escapeHtml(nowPlaying.title)}</a>
+        <a class="spotify-meta-link" href="${escapeHtml(nowPlaying.artistUrl || "#")}" target="_blank" rel="noreferrer noopener" ${nowPlaying.artistUrl ? "" : 'tabindex="-1" aria-disabled="true"'}>${escapeHtml(nowPlaying.artist || "Unknown artist")}</a>
+        <a class="spotify-meta-link" href="${escapeHtml(nowPlaying.albumUrl || "#")}" target="_blank" rel="noreferrer noopener" ${nowPlaying.albumUrl ? "" : 'tabindex="-1" aria-disabled="true"'}>${escapeHtml(nowPlaying.album || "Unknown album")}</a>
+        <div class="spotify-utility-row">
+          <button class="spotify-chip ${nowPlaying.isLiked ? "is-active" : ""}" type="button" data-spotify-action="${nowPlaying.isLiked ? "unlike" : "like"}" data-item-id="${escapeHtml(nowPlaying.itemId)}">${nowPlaying.isLiked ? "♥ Liked" : "♡ Like"}</button>
+          <button class="spotify-chip" type="button" data-spotify-action="copy-link" data-copy-url="${escapeHtml(nowPlaying.trackUrl)}">Copy Link</button>
+        </div>
+      </div>
+    </div>
+    <div class="spotify-controls">
+      <button class="spotify-control-button" type="button" data-spotify-action="previous">⏮</button>
+      <button class="spotify-control-button is-primary" type="button" data-spotify-action="${nowPlaying.isPlaying ? "pause" : "play"}">${nowPlaying.isPlaying ? "⏸" : "▶"}</button>
+      <button class="spotify-control-button" type="button" data-spotify-action="next">⏭</button>
+      <button class="spotify-control-button ${nowPlaying.shuffleEnabled ? "is-active" : ""}" type="button" data-spotify-action="shuffle" data-spotify-value="${nowPlaying.shuffleEnabled ? "0" : "1"}">⇄</button>
+      <button class="spotify-control-button ${nowPlaying.repeatState !== "off" ? "is-active" : ""}" type="button" data-spotify-action="repeat" data-repeat-state="${escapeHtml(nextRepeatState(nowPlaying.repeatState))}" title="${escapeHtml(repeatLabel)}">${nowPlaying.repeatState === "track" ? "↻1" : "↻"}</button>
+    </div>
+    <div class="spotify-progress-block">
+      <div class="spotify-progress-row">
+        <span class="footer-note" id="spotify-progress-current">${escapeHtml(formatDuration(nowPlaying.progressMs))}</span>
+        <span class="footer-note" id="spotify-progress-total">${escapeHtml(formatDuration(nowPlaying.durationMs))}</span>
+      </div>
+      <input class="slider spotify-progress-slider" type="range" min="0" max="${Math.max(nowPlaying.durationMs, 1)}" step="1000" value="${Math.max(0, nowPlaying.progressMs)}" data-spotify-action="seek" data-device-id="${escapeHtml(nowPlaying.deviceId)}">
+    </div>
+    <div class="spotify-volume-row">
+      <span class="footer-note spotify-device-name">${escapeHtml(nowPlaying.deviceName || "No active device")}</span>
+      <div class="spotify-volume-control">
+        <input class="slider spotify-volume-slider" type="range" min="0" max="100" step="1" value="${Math.max(0, nowPlaying.volumePercent)}" data-spotify-action="volume" data-device-id="${escapeHtml(nowPlaying.deviceId)}" ${nowPlaying.supportsVolume ? "" : "disabled"}>
+        <span class="metric-value small">${nowPlaying.volumePercent}%</span>
+      </div>
+    </div>
+  `;
+
+  elements.spotifyWarning.textContent = spotify.warning ?? "";
+
+  if (nowPlaying.isPlaying && nowPlaying.durationMs > 0) {
+    const renderStartedAt = Date.now();
+    const baseProgress = nowPlaying.progressMs;
+    state.spotifyProgressTimer = setInterval(() => {
+      const slider = elements.spotifyCard.querySelector(".spotify-progress-slider");
+      const currentNode = document.getElementById("spotify-progress-current");
+      if (!slider || !currentNode) {
+        clearInterval(state.spotifyProgressTimer);
+        state.spotifyProgressTimer = null;
+        return;
+      }
+
+      const elapsed = Date.now() - renderStartedAt;
+      const nextValue = Math.min(nowPlaying.durationMs, baseProgress + elapsed);
+      slider.value = String(nextValue);
+      currentNode.textContent = formatDuration(nextValue);
+    }, 500);
+  }
 }
 
 function renderAudio(audio) {
@@ -699,6 +845,13 @@ function collectDiscordUpdate() {
   return update;
 }
 
+function collectSpotifyUpdate() {
+  return {
+    enabled: elements.settingsSpotifyEnabled.checked,
+    clientId: elements.settingsSpotifyClientId.value.trim()
+  };
+}
+
 function renderProcesses(processes) {
   elements.processesList.innerHTML = processes.topProcesses.map(process => `
     <div class="process-row">
@@ -726,9 +879,137 @@ function renderSystem(system) {
   ];
 
   elements.systemList.innerHTML = rows.map(([label, value]) => `
-    <dt>${escapeHtml(label)}</dt>
-    <dd>${escapeHtml(value)}</dd>
-  `).join("");
+      <dt>${escapeHtml(label)}</dt>
+      <dd>${escapeHtml(value)}</dd>
+    `).join("");
+}
+
+function onSpotifyPanelClick(event) {
+  const button = event.target.closest("[data-spotify-action]");
+  if (!button) {
+    return;
+  }
+
+  const action = button.dataset.spotifyAction;
+  if (action === "copy-link") {
+    const url = button.dataset.copyUrl || "";
+    if (url && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).catch(() => {});
+    }
+    return;
+  }
+
+  sendSpotifyCommand({
+    action,
+    itemId: button.dataset.itemId || null,
+    deviceId: button.dataset.deviceId || state.latestSnapshot?.spotify?.nowPlaying?.deviceId || null,
+    repeatState: button.dataset.repeatState || null
+  });
+}
+
+function onSpotifyPanelInput(event) {
+  const input = event.target.closest("[data-spotify-action]");
+  if (!input) {
+    return;
+  }
+
+  if (input.dataset.spotifyAction === "seek") {
+    const currentNode = document.getElementById("spotify-progress-current");
+    if (currentNode) {
+      currentNode.textContent = formatDuration(input.value);
+    }
+
+    clearTimeout(state.spotifySeekTimer);
+    state.spotifySeekTimer = setTimeout(() => {
+      sendSpotifyCommand({
+        action: "seek",
+        deviceId: input.dataset.deviceId || state.latestSnapshot?.spotify?.nowPlaying?.deviceId || null,
+        value: Number(input.value)
+      });
+    }, 120);
+  }
+
+  if (input.dataset.spotifyAction === "volume") {
+    const valueNode = input.parentElement?.querySelector(".metric-value.small");
+    if (valueNode) {
+      valueNode.textContent = `${input.value}%`;
+    }
+
+    clearTimeout(state.spotifyVolumeTimer);
+    state.spotifyVolumeTimer = setTimeout(() => {
+      sendSpotifyCommand({
+        action: "volume",
+        deviceId: input.dataset.deviceId || state.latestSnapshot?.spotify?.nowPlaying?.deviceId || null,
+        value: Number(input.value)
+      });
+    }, 90);
+  }
+}
+
+function onSpotifyPanelChange(event) {
+  const input = event.target.closest("[data-spotify-action]");
+  if (!input) {
+    return;
+  }
+
+  if (input.dataset.spotifyAction === "seek") {
+    clearTimeout(state.spotifySeekTimer);
+    sendSpotifyCommand({
+      action: "seek",
+      deviceId: input.dataset.deviceId || state.latestSnapshot?.spotify?.nowPlaying?.deviceId || null,
+      value: Number(input.value)
+    });
+  }
+
+  if (input.dataset.spotifyAction === "volume") {
+    clearTimeout(state.spotifyVolumeTimer);
+    sendSpotifyCommand({
+      action: "volume",
+      deviceId: input.dataset.deviceId || state.latestSnapshot?.spotify?.nowPlaying?.deviceId || null,
+      value: Number(input.value)
+    });
+  }
+}
+
+async function sendSpotifyCommand(command) {
+  try {
+    const response = await fetch("/api/spotify/command", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(command)
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      elements.spotifyWarning.textContent = error?.error || "Spotify command failed.";
+      return;
+    }
+
+    const spotify = await response.json();
+    if (state.latestSnapshot) {
+      state.latestSnapshot.spotify = spotify;
+    }
+    renderSpotify(spotify);
+  } catch {
+    elements.spotifyWarning.textContent = "Spotify command failed.";
+  }
+}
+
+function nextRepeatState(currentState) {
+  return currentState === "off"
+    ? "context"
+    : currentState === "context"
+      ? "track"
+      : "off";
+}
+
+function formatDuration(value) {
+  const totalSeconds = Math.max(0, Math.floor((Number(value) || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function compactSystemValue(kind, value) {
@@ -1504,6 +1785,18 @@ function mergeSettingsState(currentState, update) {
       currentDiscord.favoriteUserIds = uniqueStrings(update.discord.favoriteUserIds);
     }
     next.preferences.discord = currentDiscord;
+  }
+
+  if (update.spotify) {
+    const currentSpotify = next.preferences.spotify ?? {};
+    if (typeof update.spotify.enabled === "boolean") {
+      currentSpotify.enabled = update.spotify.enabled;
+    }
+    if (typeof update.spotify.clientId === "string") {
+      currentSpotify.clientId = update.spotify.clientId;
+      currentSpotify.isAuthorized = false;
+    }
+    next.preferences.spotify = currentSpotify;
   }
 
   if (update.layout) {

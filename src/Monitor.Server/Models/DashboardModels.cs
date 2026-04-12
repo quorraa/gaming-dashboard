@@ -4,6 +4,7 @@ public sealed record DashboardSnapshot(
     DateTimeOffset GeneratedAt,
     TempsSnapshot Temps,
     DiscordSnapshot Discord,
+    SpotifySnapshot Spotify,
     NetworkSnapshot Network,
     SystemInfoSnapshot System,
     AudioMixerSnapshot Audio,
@@ -14,13 +15,15 @@ public sealed record DashboardSnapshot(
         DateTimeOffset.UtcNow,
         new TempsSnapshot([], "No sensor data yet."),
         DiscordSnapshot.Disabled("Discord integration disabled."),
+        SpotifySnapshot.Disabled("Spotify integration disabled."),
         NetworkSnapshot.Empty,
         SystemInfoSnapshot.Empty,
         new AudioMixerSnapshot([], [], string.Empty, null),
         new ProcessesSnapshot([]),
         new UiSnapshot(
-            ["temps", "network", "discord", "audio", "processes", "system"],
-            DashboardLayoutPreferencesSnapshot.Default));
+            ["temps", "network", "discord", "spotify", "audio", "processes", "system"],
+            DashboardLayoutPreferencesSnapshot.Default,
+            ThemePreferencesSnapshot.Default));
 }
 
 public sealed record TempsSnapshot(IReadOnlyList<TemperatureCard> Cards, string? Warning);
@@ -68,6 +71,36 @@ public sealed record DiscordMessageCard(
     string Author,
     string Content,
     string RelativeTime);
+
+public sealed record SpotifySnapshot(
+    bool Enabled,
+    string ConnectionState,
+    SpotifyNowPlayingSnapshot? NowPlaying,
+    string? Warning)
+{
+    public static SpotifySnapshot Disabled(string warning) => new(false, "disabled", null, warning);
+}
+
+public sealed record SpotifyNowPlayingSnapshot(
+    string ItemId,
+    string MediaType,
+    string Title,
+    string Artist,
+    string Album,
+    string CoverUrl,
+    string TrackUrl,
+    string ArtistUrl,
+    string AlbumUrl,
+    bool IsPlaying,
+    bool ShuffleEnabled,
+    string RepeatState,
+    int ProgressMs,
+    int DurationMs,
+    int VolumePercent,
+    string DeviceId,
+    string DeviceName,
+    bool SupportsVolume,
+    bool IsLiked);
 
 public sealed record NetworkSnapshot(
     double DownloadMbps,
@@ -123,7 +156,8 @@ public sealed record ProcessesSnapshot(IReadOnlyList<ProcessCard> TopProcesses);
 
 public sealed record UiSnapshot(
     IReadOnlyList<string> VisiblePanels,
-    DashboardLayoutPreferencesSnapshot Layout);
+    DashboardLayoutPreferencesSnapshot Layout,
+    ThemePreferencesSnapshot Theme);
 
 public sealed record PanelOption(string Key, string Label);
 
@@ -136,7 +170,9 @@ public sealed record DashboardPreferencesSnapshot(
     IReadOnlyList<string> VisiblePanels,
     AudioPreferencesSnapshot Audio,
     DiscordPreferencesSnapshot Discord,
-    DashboardLayoutPreferencesSnapshot Layout);
+    SpotifyPreferencesSnapshot Spotify,
+    DashboardLayoutPreferencesSnapshot Layout,
+    ThemePreferencesSnapshot Theme);
 
 public sealed record AudioPreferencesSnapshot(
     bool IncludeSystemSounds,
@@ -156,11 +192,19 @@ public sealed record DiscordPreferencesSnapshot(
     int LatestMessagesCount,
     IReadOnlyList<string> FavoriteUserIds);
 
+public sealed record SpotifyPreferencesSnapshot(
+    bool Enabled,
+    string ClientId,
+    string RefreshToken,
+    bool IsAuthorized);
+
 public sealed record DashboardPreferencesUpdate(
     IReadOnlyList<string>? VisiblePanels,
     AudioPreferencesUpdate? Audio,
     DiscordPreferencesUpdate? Discord,
-    DashboardLayoutPreferencesUpdate? Layout);
+    SpotifyPreferencesUpdate? Spotify,
+    DashboardLayoutPreferencesUpdate? Layout,
+    ThemePreferencesUpdate? Theme);
 
 public sealed record AudioPreferencesUpdate(
     bool? IncludeSystemSounds,
@@ -175,57 +219,85 @@ public sealed record DashboardLayoutPreferencesSnapshot(
 {
     public static DashboardLayoutPreferencesSnapshot Default { get; } = new(
         new DashboardLayoutModeSnapshot(
-            3,
-            3,
+            48,
+            40,
             [
-                new DashboardPanelLayoutSnapshot("temps", 1, 1, 2, 1),
-                new DashboardPanelLayoutSnapshot("network", 3, 1, 1, 2),
-                new DashboardPanelLayoutSnapshot("discord", 1, 2, 2, 1),
-                new DashboardPanelLayoutSnapshot("audio", 1, 3, 1, 1),
-                new DashboardPanelLayoutSnapshot("processes", 2, 3, 1, 1),
-                new DashboardPanelLayoutSnapshot("system", 3, 3, 1, 1)
+                new DashboardPanelLayoutSnapshot("temps", 1, 1, 32, 10),
+                new DashboardPanelLayoutSnapshot("network", 33, 1, 16, 10),
+                new DashboardPanelLayoutSnapshot("discord", 1, 11, 32, 10),
+                new DashboardPanelLayoutSnapshot("spotify", 33, 11, 16, 10),
+                new DashboardPanelLayoutSnapshot("audio", 1, 21, 16, 10),
+                new DashboardPanelLayoutSnapshot("processes", 17, 21, 16, 10),
+                new DashboardPanelLayoutSnapshot("system", 33, 21, 16, 10)
             ]),
         new DashboardLayoutModeSnapshot(
-            4,
-            3,
+            48,
+            40,
             [
-                new DashboardPanelLayoutSnapshot("temps", 1, 1, 2, 2),
-                new DashboardPanelLayoutSnapshot("network", 3, 1, 1, 1),
-                new DashboardPanelLayoutSnapshot("discord", 4, 1, 1, 2),
-                new DashboardPanelLayoutSnapshot("system", 3, 2, 1, 1),
-                new DashboardPanelLayoutSnapshot("audio", 1, 3, 2, 1),
-                new DashboardPanelLayoutSnapshot("processes", 3, 3, 2, 1)
+                new DashboardPanelLayoutSnapshot("temps", 1, 1, 24, 20),
+                new DashboardPanelLayoutSnapshot("network", 25, 1, 12, 10),
+                new DashboardPanelLayoutSnapshot("discord", 37, 1, 12, 20),
+                new DashboardPanelLayoutSnapshot("spotify", 25, 11, 12, 10),
+                new DashboardPanelLayoutSnapshot("system", 25, 21, 12, 10),
+                new DashboardPanelLayoutSnapshot("audio", 1, 21, 24, 10),
+                new DashboardPanelLayoutSnapshot("processes", 37, 21, 12, 10)
             ]),
         new DashboardLayoutModeSnapshot(
-            5,
-            3,
+            60,
+            40,
             [
-                new DashboardPanelLayoutSnapshot("temps", 1, 1, 2, 2),
-                new DashboardPanelLayoutSnapshot("network", 3, 1, 1, 1),
-                new DashboardPanelLayoutSnapshot("discord", 4, 1, 2, 2),
-                new DashboardPanelLayoutSnapshot("system", 3, 2, 1, 1),
-                new DashboardPanelLayoutSnapshot("audio", 1, 3, 3, 1),
-                new DashboardPanelLayoutSnapshot("processes", 4, 3, 2, 1)
+                new DashboardPanelLayoutSnapshot("temps", 1, 1, 24, 20),
+                new DashboardPanelLayoutSnapshot("network", 25, 1, 12, 10),
+                new DashboardPanelLayoutSnapshot("discord", 37, 1, 24, 20),
+                new DashboardPanelLayoutSnapshot("spotify", 25, 11, 12, 10),
+                new DashboardPanelLayoutSnapshot("audio", 1, 21, 36, 10),
+                new DashboardPanelLayoutSnapshot("processes", 37, 21, 24, 10),
+                new DashboardPanelLayoutSnapshot("system", 1, 31, 60, 10)
             ]));
 }
 
 public sealed record DashboardLayoutModeSnapshot(
     int Columns,
     int Rows,
-    IReadOnlyList<DashboardPanelLayoutSnapshot> Panels);
+    IReadOnlyList<DashboardPanelLayoutSnapshot> Panels,
+    DashboardFloatingDockSnapshot? Dock = null,
+    IReadOnlyList<DashboardLayoutVariantSnapshot>? Variants = null);
+
+public sealed record DashboardLayoutVariantSnapshot(
+    string ViewportKey,
+    int ViewportWidth,
+    int ViewportHeight,
+    int Columns,
+    int Rows,
+    IReadOnlyList<DashboardPanelLayoutSnapshot> Panels,
+    DashboardFloatingDockSnapshot Dock);
 
 public sealed record DashboardPanelLayoutSnapshot(
     string Key,
     int X,
     int Y,
     int W,
-    int H);
+    int H,
+    bool Locked = false);
+
+public sealed record DashboardFloatingDockSnapshot(
+    int X,
+    int Y,
+    bool Locked = false,
+    string Orientation = "horizontal")
+{
+    public static DashboardFloatingDockSnapshot Default { get; } = new(10, 10, false, "horizontal");
+}
 
 public sealed record DashboardLayoutPreferencesUpdate(
     string? Profile,
     int? Columns,
     int? Rows,
     IReadOnlyList<DashboardPanelLayoutUpdate>? Panels,
+    DashboardFloatingDockUpdate? Dock,
+    string? ViewportKey,
+    int? ViewportWidth,
+    int? ViewportHeight,
     bool? Reset);
 
 public sealed record DashboardPanelLayoutUpdate(
@@ -233,7 +305,63 @@ public sealed record DashboardPanelLayoutUpdate(
     int? X,
     int? Y,
     int? W,
-    int? H);
+    int? H,
+    bool? Locked);
+
+public sealed record DashboardFloatingDockUpdate(
+    int? X,
+    int? Y,
+    bool? Locked,
+    string? Orientation);
+
+public sealed record ThemePreferencesSnapshot(
+    string PresetId,
+    string PexelsApiKey,
+    string PexelsApiKeyHint,
+    ThemeBackgroundSnapshot Background)
+{
+    public static ThemePreferencesSnapshot Default { get; } = new(
+        "neon-grid",
+        string.Empty,
+        string.Empty,
+        ThemeBackgroundSnapshot.Empty);
+}
+
+public sealed record ThemeBackgroundSnapshot(
+    string Source,
+    string MediaKind,
+    string AssetId,
+    string Label,
+    string RenderUrl,
+    string PreviewUrl,
+    string Attribution,
+    string AttributionUrl)
+{
+    public static ThemeBackgroundSnapshot Empty { get; } = new(
+        "none",
+        "none",
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty);
+}
+
+public sealed record ThemePreferencesUpdate(
+    string? PresetId,
+    string? PexelsApiKey,
+    ThemeBackgroundUpdate? Background);
+
+public sealed record ThemeBackgroundUpdate(
+    string? Source,
+    string? MediaKind,
+    string? AssetId,
+    string? Label,
+    string? RenderUrl,
+    string? PreviewUrl,
+    string? Attribution,
+    string? AttributionUrl);
 
 public sealed record DiscordPreferencesUpdate(
     bool? Enabled,
@@ -246,6 +374,10 @@ public sealed record DiscordPreferencesUpdate(
     int? LatestMessagesCount,
     IReadOnlyList<string>? FavoriteUserIds);
 
+public sealed record SpotifyPreferencesUpdate(
+    bool? Enabled,
+    string? ClientId);
+
 public sealed record ProcessCard(
     int ProcessId,
     string Name,
@@ -253,3 +385,42 @@ public sealed record ProcessCard(
     double MemoryMb);
 
 public sealed record DashboardCommand(string Type, string? SessionId, double? Value);
+
+public sealed record MediaAssetSnapshot(
+    string Id,
+    string Name,
+    string MediaKind,
+    string Url,
+    string PreviewUrl,
+    long SizeBytes,
+    DateTimeOffset AddedAt);
+
+public sealed record PexelsSearchResponseSnapshot(
+    string MediaKind,
+    string Query,
+    int Page,
+    int PerPage,
+    int TotalResults,
+    string? PrevPage,
+    string? NextPage,
+    IReadOnlyList<PexelsAssetSnapshot> Results);
+
+public sealed record PexelsAssetSnapshot(
+    string Id,
+    string MediaKind,
+    string Label,
+    string PreviewUrl,
+    string RenderUrl,
+    int Width,
+    int Height,
+    int? DurationSeconds,
+    string Attribution,
+    string AttributionUrl,
+    string PexelsUrl);
+
+public sealed record SpotifyCommandRequest(
+    string Action,
+    string? ItemId,
+    string? DeviceId,
+    double? Value,
+    string? RepeatState);

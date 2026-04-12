@@ -8,6 +8,8 @@ public sealed class DashboardSettings
     public AudioSettings Audio { get; set; } = new();
     public HwInfoSettings HwInfo { get; set; } = new();
     public DiscordSettings Discord { get; set; } = new();
+    public SpotifySettings Spotify { get; set; } = new();
+    public ThemeSettings Theme { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
 }
 
@@ -78,6 +80,18 @@ public sealed class DiscordSettings
     public List<ulong> FavoriteUserIds { get; set; } = [];
 }
 
+public sealed class ThemeSettings
+{
+    public string DefaultPresetId { get; set; } = "neon-grid";
+    public string PexelsApiKey { get; set; } = string.Empty;
+}
+
+public sealed class SpotifySettings
+{
+    public bool Enabled { get; set; }
+    public string ClientId { get; set; } = string.Empty;
+}
+
 public sealed class UiSettings
 {
     public List<string> VisiblePanels { get; set; } =
@@ -85,6 +99,7 @@ public sealed class UiSettings
         "temps",
         "network",
         "discord",
+        "spotify",
         "audio",
         "processes",
         "system"
