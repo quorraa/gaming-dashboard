@@ -16,9 +16,11 @@ public sealed record DashboardSnapshot(
         DiscordSnapshot.Disabled("Discord integration disabled."),
         NetworkSnapshot.Empty,
         SystemInfoSnapshot.Empty,
-        new AudioMixerSnapshot([], null),
+        new AudioMixerSnapshot([], [], string.Empty, null),
         new ProcessesSnapshot([]),
-        new UiSnapshot(["temps", "network", "discord", "audio", "processes", "system"]));
+        new UiSnapshot(
+            ["temps", "network", "discord", "audio", "processes", "system"],
+            DashboardLayoutPreferencesSnapshot.Default));
 }
 
 public sealed record TempsSnapshot(IReadOnlyList<TemperatureCard> Cards, string? Warning);
@@ -102,7 +104,11 @@ public sealed record SystemInfoSnapshot(
 
 public sealed record AudioMixerSnapshot(
     IReadOnlyList<AudioSessionCard> Sessions,
+    IReadOnlyList<AudioEndpointOption> Endpoints,
+    string SelectedEndpointId,
     string? Warning);
+
+public sealed record AudioEndpointOption(string Id, string Name, bool IsDefault);
 
 public sealed record AudioSessionCard(
     string Id,
@@ -115,7 +121,9 @@ public sealed record AudioSessionCard(
 
 public sealed record ProcessesSnapshot(IReadOnlyList<ProcessCard> TopProcesses);
 
-public sealed record UiSnapshot(IReadOnlyList<string> VisiblePanels);
+public sealed record UiSnapshot(
+    IReadOnlyList<string> VisiblePanels,
+    DashboardLayoutPreferencesSnapshot Layout);
 
 public sealed record PanelOption(string Key, string Label);
 
@@ -127,12 +135,14 @@ public sealed record DashboardEditorState(
 public sealed record DashboardPreferencesSnapshot(
     IReadOnlyList<string> VisiblePanels,
     AudioPreferencesSnapshot Audio,
-    DiscordPreferencesSnapshot Discord);
+    DiscordPreferencesSnapshot Discord,
+    DashboardLayoutPreferencesSnapshot Layout);
 
 public sealed record AudioPreferencesSnapshot(
     bool IncludeSystemSounds,
     int MaxSessions,
-    IReadOnlyList<string> VisibleSessionMatches);
+    IReadOnlyList<string> VisibleSessionMatches,
+    string SelectedEndpointId);
 
 public sealed record DiscordPreferencesSnapshot(
     bool Enabled,
@@ -149,12 +159,81 @@ public sealed record DiscordPreferencesSnapshot(
 public sealed record DashboardPreferencesUpdate(
     IReadOnlyList<string>? VisiblePanels,
     AudioPreferencesUpdate? Audio,
-    DiscordPreferencesUpdate? Discord);
+    DiscordPreferencesUpdate? Discord,
+    DashboardLayoutPreferencesUpdate? Layout);
 
 public sealed record AudioPreferencesUpdate(
     bool? IncludeSystemSounds,
     int? MaxSessions,
-    IReadOnlyList<string>? VisibleSessionMatches);
+    IReadOnlyList<string>? VisibleSessionMatches,
+    string? SelectedEndpointId);
+
+public sealed record DashboardLayoutPreferencesSnapshot(
+    DashboardLayoutModeSnapshot Desktop,
+    DashboardLayoutModeSnapshot TabletLandscape,
+    DashboardLayoutModeSnapshot PhoneLandscape)
+{
+    public static DashboardLayoutPreferencesSnapshot Default { get; } = new(
+        new DashboardLayoutModeSnapshot(
+            3,
+            3,
+            [
+                new DashboardPanelLayoutSnapshot("temps", 1, 1, 2, 1),
+                new DashboardPanelLayoutSnapshot("network", 3, 1, 1, 2),
+                new DashboardPanelLayoutSnapshot("discord", 1, 2, 2, 1),
+                new DashboardPanelLayoutSnapshot("audio", 1, 3, 1, 1),
+                new DashboardPanelLayoutSnapshot("processes", 2, 3, 1, 1),
+                new DashboardPanelLayoutSnapshot("system", 3, 3, 1, 1)
+            ]),
+        new DashboardLayoutModeSnapshot(
+            4,
+            3,
+            [
+                new DashboardPanelLayoutSnapshot("temps", 1, 1, 2, 2),
+                new DashboardPanelLayoutSnapshot("network", 3, 1, 1, 1),
+                new DashboardPanelLayoutSnapshot("discord", 4, 1, 1, 2),
+                new DashboardPanelLayoutSnapshot("system", 3, 2, 1, 1),
+                new DashboardPanelLayoutSnapshot("audio", 1, 3, 2, 1),
+                new DashboardPanelLayoutSnapshot("processes", 3, 3, 2, 1)
+            ]),
+        new DashboardLayoutModeSnapshot(
+            5,
+            3,
+            [
+                new DashboardPanelLayoutSnapshot("temps", 1, 1, 2, 2),
+                new DashboardPanelLayoutSnapshot("network", 3, 1, 1, 1),
+                new DashboardPanelLayoutSnapshot("discord", 4, 1, 2, 2),
+                new DashboardPanelLayoutSnapshot("system", 3, 2, 1, 1),
+                new DashboardPanelLayoutSnapshot("audio", 1, 3, 3, 1),
+                new DashboardPanelLayoutSnapshot("processes", 4, 3, 2, 1)
+            ]));
+}
+
+public sealed record DashboardLayoutModeSnapshot(
+    int Columns,
+    int Rows,
+    IReadOnlyList<DashboardPanelLayoutSnapshot> Panels);
+
+public sealed record DashboardPanelLayoutSnapshot(
+    string Key,
+    int X,
+    int Y,
+    int W,
+    int H);
+
+public sealed record DashboardLayoutPreferencesUpdate(
+    string? Profile,
+    int? Columns,
+    int? Rows,
+    IReadOnlyList<DashboardPanelLayoutUpdate>? Panels,
+    bool? Reset);
+
+public sealed record DashboardPanelLayoutUpdate(
+    string Key,
+    int? X,
+    int? Y,
+    int? W,
+    int? H);
 
 public sealed record DiscordPreferencesUpdate(
     bool? Enabled,

@@ -42,7 +42,7 @@ public sealed class DashboardSnapshotBuilder(
                 system,
                 audio,
                 processes,
-                new UiSnapshot(preferencesStore.Current.VisiblePanels));
+                new UiSnapshot(preferencesStore.Current.VisiblePanels, preferencesStore.Current.Layout));
 
             stateStore.Update(snapshot);
             return snapshot;

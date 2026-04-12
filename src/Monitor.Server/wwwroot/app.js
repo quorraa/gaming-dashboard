@@ -11,7 +11,11 @@ const state = {
   audioInteractionHoldUntil: 0,
   manualFullscreen: false,
   layoutMode: "default",
-  settingsOpen: false
+  settingsOpen: false,
+  layoutEditorProfile: null,
+  layoutEditing: false,
+  layoutDrag: null,
+  layoutPreview: null
 };
 
 const elements = {
@@ -19,11 +23,16 @@ const elements = {
   dashboard: document.getElementById("dashboard"),
   fullscreenToggle: document.getElementById("fullscreen-toggle"),
   settingsToggle: document.getElementById("settings-toggle"),
+  layoutToggle: document.getElementById("layout-toggle"),
   settingsBackdrop: document.getElementById("settings-backdrop"),
   settingsDrawer: document.getElementById("settings-drawer"),
   settingsClose: document.getElementById("settings-close"),
   settingsPanels: document.getElementById("settings-panels"),
   settingsAudioApps: document.getElementById("settings-audio-apps"),
+  settingsLayoutProfile: document.getElementById("settings-layout-profile"),
+  settingsLayoutColumns: document.getElementById("settings-layout-columns"),
+  settingsLayoutRows: document.getElementById("settings-layout-rows"),
+  settingsResetLayout: document.getElementById("settings-reset-layout"),
   settingsIncludeSystem: document.getElementById("settings-include-system"),
   settingsMaxSessions: document.getElementById("settings-max-sessions"),
   settingsMaxSessionsValue: document.getElementById("settings-max-sessions-value"),
@@ -59,6 +68,8 @@ const elements = {
   messagesList: document.getElementById("messages-list"),
   discordWarning: document.getElementById("discord-warning"),
   audioPanel: document.querySelector(".panel-audio"),
+  audioDevicePicker: document.getElementById("audio-device-picker"),
+  audioDevicePickerMeasure: document.getElementById("audio-device-picker-measure"),
   audioList: document.getElementById("audio-list"),
   audioWarning: document.getElementById("audio-warning"),
   processesList: document.getElementById("processes-list"),
@@ -93,9 +104,11 @@ async function init() {
 }
 
 function bindUi() {
+  ensureLayoutChrome();
   window.addEventListener("resize", scheduleFit);
   window.addEventListener("orientationchange", scheduleFit);
   document.addEventListener("fullscreenchange", updateFullscreenButton);
+  document.addEventListener("pointermove", onGlobalPointerMove, true);
   document.addEventListener("pointerup", onGlobalPointerRelease, true);
   document.addEventListener("pointercancel", onGlobalPointerRelease, true);
   document.addEventListener("keydown", event => {
@@ -105,10 +118,25 @@ function bindUi() {
   });
   elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
   elements.settingsToggle.addEventListener("click", () => setSettingsOpen(!state.settingsOpen));
+  elements.layoutToggle.addEventListener("click", toggleLayoutEditing);
   elements.settingsClose.addEventListener("click", () => setSettingsOpen(false));
   elements.settingsBackdrop.addEventListener("click", () => setSettingsOpen(false));
   elements.settingsPanels.addEventListener("click", onPanelToggleClick);
   elements.settingsAudioApps.addEventListener("click", onAudioAppToggleClick);
+  elements.settingsLayoutProfile.addEventListener("change", () => {
+    state.layoutEditorProfile = elements.settingsLayoutProfile.value || currentLayoutProfileKey();
+    renderSettings(state.settings);
+  });
+  elements.settingsLayoutColumns.addEventListener("input", onLayoutFieldInput);
+  elements.settingsLayoutRows.addEventListener("input", onLayoutFieldInput);
+  elements.settingsResetLayout.addEventListener("click", () => {
+    saveSettings({
+      layout: {
+        profile: currentLayoutEditorProfile(),
+        reset: true
+      }
+    });
+  });
   elements.settingsIncludeSystem.addEventListener("change", () => {
     saveSettings({
       audio: {
@@ -139,7 +167,15 @@ function bindUi() {
       discord: collectDiscordUpdate()
     });
   });
+  elements.audioDevicePicker.addEventListener("change", () => {
+    saveSettings({
+      audio: {
+        selectedEndpointId: elements.audioDevicePicker.value
+      }
+    });
+  });
   updateFullscreenButton();
+  syncLayoutEditingUi();
   scheduleFit();
 }
 
@@ -201,6 +237,7 @@ function renderSettings(editorState) {
   elements.settingsIncludeSystem.checked = Boolean(audioPreferences.includeSystemSounds);
   elements.settingsMaxSessions.value = clampNumber(audioPreferences.maxSessions, 1, Number(elements.settingsMaxSessions.max)).toString();
   elements.settingsMaxSessionsValue.textContent = elements.settingsMaxSessions.value;
+  renderLayoutEditor(preferences.layout);
 
   const discordPreferences = preferences.discord ?? {};
   elements.settingsDiscordEnabled.checked = Boolean(discordPreferences.enabled);
@@ -218,6 +255,23 @@ function renderSettings(editorState) {
     : "";
 }
 
+function renderLayoutEditor(layoutPreferences) {
+  const profiles = [
+    { key: "desktop", label: "Desktop" },
+    { key: "tablet-landscape", label: "Tablet Landscape" },
+    { key: "phone-landscape", label: "Phone Landscape" }
+  ];
+
+  const selectedProfile = currentLayoutEditorProfile();
+  elements.settingsLayoutProfile.innerHTML = profiles.map(profile => `
+    <option value="${profile.key}" ${profile.key === selectedProfile ? "selected" : ""}>${profile.label}</option>
+  `).join("");
+
+  const layout = getLayoutProfile(layoutPreferences, selectedProfile);
+  elements.settingsLayoutColumns.value = String(layout.columns ?? 1);
+  elements.settingsLayoutRows.value = String(layout.rows ?? 1);
+}
+
 function renderUi(ui) {
   const visible = new Set((ui?.visiblePanels ?? []).map(panel => String(panel).toLowerCase()));
   const allPanels = elements.panels.map(panel => panel.dataset.panel);
@@ -229,6 +283,27 @@ function renderUi(ui) {
   });
 
   elements.dashboard.classList.toggle("has-custom-visibility", customVisibility);
+  applyDashboardLayout(ui?.layout);
+  syncLayoutChrome();
+}
+
+function applyDashboardLayout(layoutPreferences) {
+  const layout = getLayoutProfile(state.layoutPreview ?? layoutPreferences, currentLayoutProfileKey());
+  elements.dashboard.style.setProperty("--layout-columns", String(layout.columns));
+  elements.dashboard.style.setProperty("--layout-rows", String(layout.rows));
+  elements.dashboard.style.gridTemplateAreas = "none";
+  elements.dashboard.style.gridTemplateColumns = `repeat(${layout.columns}, minmax(0, 1fr))`;
+  elements.dashboard.style.gridTemplateRows = `repeat(${layout.rows}, minmax(0, 1fr))`;
+  elements.dashboard.style.gridAutoRows = "minmax(0, 1fr)";
+
+  const layoutsByKey = new Map((layout.panels ?? []).map(panel => [String(panel.key).toLowerCase(), panel]));
+  elements.panels.forEach(panel => {
+    const key = String(panel.dataset.panel).toLowerCase();
+    const position = layoutsByKey.get(key) ?? { x: 1, y: 1, w: 1, h: 1 };
+    panel.style.gridArea = "auto";
+    panel.style.gridColumn = `${position.x} / span ${position.w}`;
+    panel.style.gridRow = `${position.y} / span ${position.h}`;
+  });
 }
 
 function renderTemps(temps) {
@@ -318,6 +393,7 @@ function renderDiscord(discord) {
 }
 
 function renderAudio(audio) {
+  renderAudioDevicePicker(audio);
   elements.audioList.classList.toggle("is-grid", state.layoutMode === "tablet-landscape" || state.layoutMode === "phone-landscape");
   const sessions = (audio.sessions ?? []).map(applyOptimisticAudioState);
   state.audioRows = Math.max(1, Math.ceil((sessions.length || 0) / 2));
@@ -372,6 +448,19 @@ function renderAudio(audio) {
   });
 }
 
+function renderAudioDevicePicker(audio) {
+  const endpoints = Array.isArray(audio?.endpoints) ? audio.endpoints : [];
+  const selectedEndpointId = audio?.selectedEndpointId ?? "";
+  elements.audioDevicePicker.innerHTML = endpoints.map(endpoint => `
+    <option value="${escapeHtml(endpoint.id)}" ${endpoint.id === selectedEndpointId ? "selected" : ""}>
+      ${escapeHtml(compactEndpointName(endpoint.name, endpoint.isDefault))}
+    </option>
+  `).join("");
+  elements.audioDevicePicker.disabled = endpoints.length <= 1;
+  elements.audioDevicePicker.title = endpoints.find(endpoint => endpoint.id === selectedEndpointId)?.name ?? "";
+  syncAudioDevicePickerWidth();
+}
+
 function onPanelToggleClick(event) {
   const button = event.target.closest("[data-panel-key]");
   if (!button || !state.settings?.preferences) {
@@ -404,6 +493,133 @@ function onAudioAppToggleClick(event) {
       visibleSessionMatches: Array.from(current)
     }
   });
+}
+
+function onLayoutFieldInput(event) {
+  if (!state.settings?.preferences?.layout) {
+    return;
+  }
+
+  const profile = currentLayoutEditorProfile();
+  const columns = clampNumber(elements.settingsLayoutColumns.value, 1, 24);
+  const rows = clampNumber(elements.settingsLayoutRows.value, 1, 24);
+
+  saveSettings({
+    layout: {
+      profile,
+      columns,
+      rows
+    }
+  });
+}
+
+function ensureLayoutChrome() {
+  elements.panels.forEach(panel => {
+    if (panel.querySelector(".layout-shell")) {
+      return;
+    }
+
+    const shell = document.createElement("div");
+    shell.className = "layout-shell";
+    shell.innerHTML = `
+      <button class="layout-move-handle" type="button" aria-label="Move panel">Move</button>
+      <div class="layout-panel-tag"></div>
+      <button class="layout-resize-handle" type="button" aria-label="Resize panel">◢</button>
+    `;
+
+    const moveHandle = shell.querySelector(".layout-move-handle");
+    const resizeHandle = shell.querySelector(".layout-resize-handle");
+    const key = panel.dataset.panel;
+    moveHandle.addEventListener("pointerdown", event => startLayoutDrag(event, key, "move"));
+    resizeHandle.addEventListener("pointerdown", event => startLayoutDrag(event, key, "resize"));
+    panel.appendChild(shell);
+  });
+}
+
+function syncLayoutChrome() {
+  elements.panels.forEach(panel => {
+    const shell = panel.querySelector(".layout-shell");
+    if (!shell) {
+      return;
+    }
+
+    const tag = shell.querySelector(".layout-panel-tag");
+    if (tag) {
+      tag.textContent = titleCase(panel.dataset.panel);
+    }
+  });
+}
+
+function toggleLayoutEditing() {
+  state.layoutEditing = !state.layoutEditing;
+  state.layoutPreview = null;
+  state.layoutDrag = null;
+  syncLayoutEditingUi();
+  applyDashboardLayout(state.latestSnapshot?.ui?.layout ?? state.settings?.preferences?.layout);
+  scheduleFit();
+}
+
+function syncLayoutEditingUi() {
+  document.body.classList.toggle("layout-editing", state.layoutEditing);
+  elements.layoutToggle.classList.toggle("is-active", state.layoutEditing);
+  elements.layoutToggle.textContent = state.layoutEditing ? "Lock" : "Grid";
+  elements.layoutToggle.setAttribute("aria-label", state.layoutEditing ? "Lock layout editing" : "Unlock layout editing");
+}
+
+function startLayoutDrag(event, panelKey, mode) {
+  if (!state.layoutEditing) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const profile = currentLayoutProfileKey();
+  const rootLayout = structuredClone(state.settings?.preferences?.layout ?? state.latestSnapshot?.ui?.layout);
+  const layout = getLayoutProfile(rootLayout, profile);
+  const panel = (layout.panels ?? []).find(item => String(item.key).toLowerCase() === String(panelKey).toLowerCase());
+  if (!panel) {
+    return;
+  }
+
+  const rect = elements.dashboard.getBoundingClientRect();
+  state.layoutPreview = rootLayout;
+  state.layoutDrag = {
+    panelKey,
+    mode,
+    profile,
+    startX: event.clientX,
+    startY: event.clientY,
+    initial: { ...panel },
+    columns: layout.columns,
+    rows: layout.rows,
+    rect
+  };
+}
+
+function onGlobalPointerMove(event) {
+  if (!state.layoutDrag) {
+    return;
+  }
+
+  event.preventDefault();
+  const drag = state.layoutDrag;
+  const cellWidth = drag.rect.width / drag.columns;
+  const cellHeight = drag.rect.height / drag.rows;
+  const deltaCols = Math.round((event.clientX - drag.startX) / Math.max(cellWidth, 1));
+  const deltaRows = Math.round((event.clientY - drag.startY) / Math.max(cellHeight, 1));
+
+  const next = { ...drag.initial };
+  if (drag.mode === "move") {
+    next.x = clampNumber(drag.initial.x + deltaCols, 1, drag.columns - drag.initial.w + 1);
+    next.y = clampNumber(drag.initial.y + deltaRows, 1, drag.rows - drag.initial.h + 1);
+  } else {
+    next.w = clampNumber(drag.initial.w + deltaCols, 1, drag.columns - drag.initial.x + 1);
+    next.h = clampNumber(drag.initial.h + deltaRows, 1, drag.rows - drag.initial.y + 1);
+  }
+
+  setLayoutPreviewPanel(drag.profile, drag.panelKey, next);
+  applyDashboardLayout();
 }
 
 function collectDiscordUpdate() {
@@ -501,6 +717,48 @@ function compactSystemValue(kind, value) {
   }
 
   return text.replace(/\s{2,}/g, " ").trim();
+}
+
+function compactEndpointName(value, isDefault) {
+  const original = String(value ?? "").trim();
+  if (!original) {
+    return isDefault ? "Default" : "Audio Device";
+  }
+
+  const compacted = original
+    .replace(/[()]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (compacted) {
+    return compacted;
+  }
+
+  const fallback = original
+    .replace(/[()]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return fallback || (isDefault ? "Default" : "Audio Device");
+}
+
+function syncAudioDevicePickerWidth() {
+  const select = elements.audioDevicePicker;
+  const measure = elements.audioDevicePickerMeasure;
+  if (!select || !measure) {
+    return;
+  }
+
+  const selectedOption = select.options[select.selectedIndex];
+  const text = selectedOption?.text?.trim() || "Audio Device";
+  measure.textContent = text;
+
+  const isPhoneLandscape = state.layoutMode === "phone-landscape";
+  const minWidth = isPhoneLandscape ? 92 : 124;
+  const maxWidth = isPhoneLandscape ? 156 : 240;
+  const measuredWidth = Math.ceil(measure.getBoundingClientRect().width) + (isPhoneLandscape ? 30 : 34);
+  const width = Math.max(minWidth, Math.min(maxWidth, measuredWidth));
+  select.style.width = `${width}px`;
 }
 
 function renderDiscordIdentity({ name, subtitle, accent }) {
@@ -607,6 +865,11 @@ function shouldFreezeAudioRender() {
 }
 
 function onGlobalPointerRelease(event) {
+  if (state.layoutDrag) {
+    finalizeLayoutDrag();
+    return;
+  }
+
   const sessionId = state.audioDraggingSessionId;
   if (!sessionId) {
     return;
@@ -622,6 +885,48 @@ function onGlobalPointerRelease(event) {
   }
 
   state.audioDraggingSessionId = null;
+}
+
+function finalizeLayoutDrag() {
+  const drag = state.layoutDrag;
+  if (!drag || !state.layoutPreview) {
+    state.layoutDrag = null;
+    return;
+  }
+
+  const layout = getLayoutProfile(state.layoutPreview, drag.profile);
+  const panel = (layout.panels ?? []).find(item => String(item.key).toLowerCase() === String(drag.panelKey).toLowerCase());
+  state.layoutDrag = null;
+  if (!panel) {
+    state.layoutPreview = null;
+    return;
+  }
+
+  const update = {
+    layout: {
+      profile: drag.profile,
+      panels: [{
+        key: panel.key,
+        x: panel.x,
+        y: panel.y,
+        w: panel.w,
+        h: panel.h
+      }]
+    }
+  };
+
+  saveSettings(update).finally(() => {
+    if (state.latestSnapshot?.ui) {
+      state.latestSnapshot.ui = {
+        ...state.latestSnapshot.ui,
+        layout: state.settings?.preferences?.layout ?? state.latestSnapshot.ui.layout
+      };
+    }
+
+    state.layoutPreview = null;
+    renderSettings(state.settings);
+    applyDashboardLayout();
+  });
 }
 
 function finalizeSliderInteraction(slider) {
@@ -774,6 +1079,7 @@ function fitDashboardToViewport() {
   }
 
   syncLayoutMode();
+  applyDashboardLayout(state.latestSnapshot?.ui?.layout ?? state.settings?.preferences?.layout);
 
   if (!shouldFitDashboard()) {
     document.body.classList.remove("is-fitted");
@@ -831,6 +1137,68 @@ function syncLayoutMode() {
   document.body.classList.toggle("layout-tablet-landscape", mode === "tablet-landscape");
 }
 
+function currentLayoutProfileKey() {
+  return state.layoutMode === "phone-landscape"
+    ? "phone-landscape"
+    : state.layoutMode === "tablet-landscape"
+      ? "tablet-landscape"
+      : "desktop";
+}
+
+function currentLayoutEditorProfile() {
+  if (!state.layoutEditorProfile) {
+    state.layoutEditorProfile = currentLayoutProfileKey();
+  }
+
+  return state.layoutEditorProfile;
+}
+
+function getLayoutProfile(layoutPreferences, profile) {
+  const source = layoutPreferences ?? state.settings?.preferences?.layout ?? state.latestSnapshot?.ui?.layout;
+  const fallback = {
+    columns: 3,
+    rows: 3,
+    panels: elements.panels.map(panel => ({ key: panel.dataset.panel, x: 1, y: 1, w: 1, h: 1 }))
+  };
+
+  if (!source) {
+    return fallback;
+  }
+
+  const candidate = profile === "phone-landscape"
+    ? source.phoneLandscape
+    : profile === "tablet-landscape"
+      ? source.tabletLandscape
+      : source.desktop;
+
+  return candidate ?? fallback;
+}
+
+function setLayoutPreviewPanel(profile, panelKey, patch) {
+  const root = state.layoutPreview ?? structuredClone(state.settings?.preferences?.layout ?? state.latestSnapshot?.ui?.layout);
+  if (!root) {
+    return;
+  }
+
+  const property = profile === "phone-landscape"
+    ? "phoneLandscape"
+    : profile === "tablet-landscape"
+      ? "tabletLandscape"
+      : "desktop";
+
+  const currentProfile = structuredClone(root[property] ?? getLayoutProfile(root, profile));
+  currentProfile.panels = (currentProfile.panels ?? []).map(panel =>
+    String(panel.key).toLowerCase() === String(panelKey).toLowerCase()
+      ? { ...panel, ...patch }
+      : panel);
+  root[property] = currentProfile;
+  state.layoutPreview = root;
+
+  if (state.settingsOpen && currentLayoutEditorProfile() === profile) {
+    renderLayoutEditor(root);
+  }
+}
+
 async function saveSettings(update) {
   if (!update) {
     return;
@@ -885,6 +1253,9 @@ function mergeSettingsState(currentState, update) {
       currentAudio.visibleSessionMatches = uniqueStrings(update.audio.visibleSessionMatches);
       next.availableAudioApps = uniqueStrings([...(next.availableAudioApps ?? []), ...currentAudio.visibleSessionMatches]);
     }
+    if (typeof update.audio.selectedEndpointId === "string") {
+      currentAudio.selectedEndpointId = update.audio.selectedEndpointId;
+    }
     next.preferences.audio = currentAudio;
   }
 
@@ -919,6 +1290,46 @@ function mergeSettingsState(currentState, update) {
       currentDiscord.favoriteUserIds = uniqueStrings(update.discord.favoriteUserIds);
     }
     next.preferences.discord = currentDiscord;
+  }
+
+  if (update.layout) {
+    const currentLayout = structuredClone(next.preferences.layout ?? {});
+    if (update.layout.reset) {
+      delete currentLayout.desktop;
+      delete currentLayout.tabletLandscape;
+      delete currentLayout.phoneLandscape;
+    } else {
+      const profile = update.layout.profile || currentLayoutProfileKey();
+      const profileKey = profile === "phone-landscape"
+        ? "phoneLandscape"
+        : profile === "tablet-landscape"
+          ? "tabletLandscape"
+          : "desktop";
+      const currentProfile = structuredClone(currentLayout[profileKey] ?? { columns: 3, rows: 3, panels: [] });
+      if (typeof update.layout.columns === "number") {
+        currentProfile.columns = update.layout.columns;
+      }
+      if (typeof update.layout.rows === "number") {
+        currentProfile.rows = update.layout.rows;
+      }
+      if (Array.isArray(update.layout.panels)) {
+        const byKey = new Map((currentProfile.panels ?? []).map(panel => [panel.key, panel]));
+        update.layout.panels.forEach(panel => {
+          const existing = byKey.get(panel.key) ?? { key: panel.key, x: 1, y: 1, w: 1, h: 1 };
+          byKey.set(panel.key, {
+            ...existing,
+            ...(typeof panel.x === "number" ? { x: panel.x } : {}),
+            ...(typeof panel.y === "number" ? { y: panel.y } : {}),
+            ...(typeof panel.w === "number" ? { w: panel.w } : {}),
+            ...(typeof panel.h === "number" ? { h: panel.h } : {})
+          });
+        });
+        currentProfile.panels = Array.from(byKey.values());
+      }
+      currentLayout[profileKey] = currentProfile;
+    }
+
+    next.preferences.layout = currentLayout;
   }
 
   return next;

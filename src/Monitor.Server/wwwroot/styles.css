@@ -110,6 +110,29 @@ body.manual-fullscreen .fullscreen-toggle {
   line-height: 1;
 }
 
+.layout-toggle {
+  position: fixed;
+  top: 90px;
+  right: 10px;
+  z-index: 20;
+  min-width: 48px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(83, 221, 255, 0.35);
+  background: rgba(11, 15, 32, 0.88);
+  color: var(--cyan);
+  box-shadow: 0 0 18px rgba(24, 196, 255, 0.18);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.layout-toggle.is-active {
+  color: var(--amber);
+  border-color: rgba(255, 191, 47, 0.45);
+}
+
 .settings-backdrop {
   position: fixed;
   inset: 0;
@@ -306,6 +329,25 @@ body.settings-open .settings-drawer {
   align-content: stretch;
 }
 
+body.layout-editing .dashboard {
+  position: relative;
+}
+
+body.layout-editing .dashboard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: 12px;
+  background-image:
+    linear-gradient(to right, rgba(31, 226, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(31, 226, 255, 0.1) 1px, transparent 1px);
+  background-size:
+    calc(100% / var(--layout-columns, 3)) 100%,
+    100% calc(100% / var(--layout-rows, 3));
+}
+
 .panel {
   position: relative;
   overflow: hidden;
@@ -315,6 +357,75 @@ body.settings-open .settings-drawer {
   border-radius: 12px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 0 24px var(--panel-glow);
   padding: 12px 14px 14px;
+}
+
+body.layout-editing .panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  border: 1px dashed rgba(255, 191, 47, 0.55);
+  pointer-events: none;
+}
+
+body.layout-editing .panel > *:not(.layout-shell) {
+  pointer-events: none;
+  user-select: none;
+}
+
+.layout-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: none;
+  pointer-events: none;
+}
+
+body.layout-editing .layout-shell {
+  display: block;
+}
+
+.layout-move-handle,
+.layout-resize-handle,
+.layout-panel-tag {
+  position: absolute;
+  pointer-events: auto;
+  border: 1px solid rgba(255, 191, 47, 0.4);
+  background: rgba(11, 15, 32, 0.92);
+  color: var(--amber);
+  font: inherit;
+  line-height: 1;
+}
+
+.layout-move-handle {
+  top: 8px;
+  left: 8px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+}
+
+.layout-panel-tag {
+  top: 8px;
+  right: 8px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.layout-resize-handle {
+  right: 8px;
+  bottom: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
 }
 
 .panel::before {
@@ -330,6 +441,7 @@ body.settings-open .settings-drawer {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+  gap: 10px;
 }
 
 .eyebrow {
@@ -708,6 +820,57 @@ body.settings-open .settings-drawer {
   gap: 6px;
 }
 
+.audio-device-picker {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.audio-device-picker-label {
+  display: none;
+}
+
+.audio-device-select {
+  appearance: none;
+  width: 124px;
+  min-width: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(83, 221, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 6px 24px 6px 10px;
+  text-overflow: ellipsis;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--cyan) 50%),
+    linear-gradient(135deg, var(--cyan) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) calc(50% - 2px),
+    calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.audio-device-select:disabled {
+  opacity: 0.6;
+}
+
+.audio-device-picker-measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0;
+}
+
 .slider-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 56px 38px;
@@ -934,6 +1097,16 @@ body.layout-phone-landscape .audio-row {
   padding: 7px 8px;
 }
 
+body.layout-phone-landscape .audio-device-picker {
+  min-width: 0;
+}
+
+body.layout-phone-landscape .audio-device-select {
+  font-size: 0.68rem;
+  padding: 5px 22px 5px 8px;
+  width: 92px;
+}
+
 body.layout-phone-landscape .slider-wrap {
   grid-template-columns: minmax(0, 1fr) 40px 28px;
   gap: 4px;
@@ -1145,6 +1318,14 @@ body.layout-tablet-landscape .audio-row {
   padding: 8px 10px;
 }
 
+body.layout-tablet-landscape .audio-device-picker {
+  min-width: 0;
+}
+
+body.layout-tablet-landscape .audio-device-select {
+  font-size: 0.74rem;
+}
+
 body.layout-tablet-landscape .slider-wrap {
   grid-template-columns: minmax(0, 1fr) 48px 32px;
   gap: 5px;
@@ -1247,4 +1428,5 @@ body.layout-tablet-landscape.discord-disabled #processes-list .process-row:nth-c
   .settings-form-grid {
     grid-template-columns: 1fr;
   }
+
 }

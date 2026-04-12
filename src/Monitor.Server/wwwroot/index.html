@@ -12,6 +12,7 @@
 <body>
   <button class="fullscreen-toggle" id="fullscreen-toggle" type="button" aria-label="Toggle fullscreen">⤢</button>
   <button class="settings-toggle" id="settings-toggle" type="button" aria-label="Open live controls">⚙</button>
+  <button class="layout-toggle" id="layout-toggle" type="button" aria-label="Unlock layout editing">⊞</button>
   <div class="settings-backdrop" id="settings-backdrop" hidden></div>
   <aside class="settings-drawer" id="settings-drawer" aria-hidden="true">
     <div class="settings-header">
@@ -44,6 +45,27 @@
       </div>
       <div class="settings-subtitle">Select only the apps you want in the mixer. If none are selected, all active apps stay visible.</div>
       <div class="toggle-grid audio-app-grid" id="settings-audio-apps"></div>
+    </section>
+    <section class="settings-section">
+      <div class="settings-row">
+        <div class="section-title">Layout Studio</div>
+        <button class="ghost-button" id="settings-reset-layout" type="button">Reset</button>
+      </div>
+      <div class="settings-subtitle">Customize grid placement for each device profile with exact panel coordinates.</div>
+      <div class="settings-form-grid">
+        <label class="settings-field">
+          <span class="settings-field-label">Profile</span>
+          <select id="settings-layout-profile" class="settings-input"></select>
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Snap Columns</span>
+          <input id="settings-layout-columns" class="settings-input" type="number" min="1" max="24" step="1">
+        </label>
+        <label class="settings-field">
+          <span class="settings-field-label">Snap Rows</span>
+          <input id="settings-layout-rows" class="settings-input" type="number" min="1" max="24" step="1">
+        </label>
+      </div>
     </section>
     <section class="settings-section">
       <div class="settings-row">
@@ -163,6 +185,11 @@
       <section class="panel panel-audio" data-panel="audio">
         <header class="panel-header">
           <span class="eyebrow">Audio Mixer</span>
+          <label class="audio-device-picker" aria-label="Audio device picker">
+            <span class="audio-device-picker-label">Audio Device</span>
+            <select id="audio-device-picker" class="audio-device-select"></select>
+            <span id="audio-device-picker-measure" class="audio-device-picker-measure" aria-hidden="true"></span>
+          </label>
         </header>
         <div class="audio-list" id="audio-list"></div>
         <div class="warning-text" id="audio-warning"></div>

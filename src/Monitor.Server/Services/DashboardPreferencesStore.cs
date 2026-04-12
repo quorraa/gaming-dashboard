@@ -69,7 +69,8 @@ public sealed class DashboardPreferencesStore
                 Math.Clamp(audioUpdate?.MaxSessions ?? currentAudio.MaxSessions, 1, 24),
                 audioUpdate?.VisibleSessionMatches is null
                     ? currentAudio.VisibleSessionMatches
-                    : NormalizeAudioApps(audioUpdate.VisibleSessionMatches));
+                    : NormalizeAudioApps(audioUpdate.VisibleSessionMatches),
+                audioUpdate?.SelectedEndpointId?.Trim() ?? currentAudio.SelectedEndpointId);
 
             var discordUpdate = update.Discord;
             var currentDiscord = _current.Discord;
@@ -93,7 +94,11 @@ public sealed class DashboardPreferencesStore
                     ? currentDiscord.FavoriteUserIds
                     : NormalizeDiscordIds(discordUpdate.FavoriteUserIds));
 
-            _current = new DashboardPreferencesSnapshot(visiblePanels, audio, discord);
+            var layout = update.Layout is null
+                ? _current.Layout
+                : MergeLayoutPreferences(_current.Layout, update.Layout);
+
+            _current = new DashboardPreferencesSnapshot(visiblePanels, audio, discord, layout);
             PersistUnsafe();
             return _current;
         }
@@ -123,7 +128,8 @@ public sealed class DashboardPreferencesStore
                 new AudioPreferencesSnapshot(
                     loadedAudio.IncludeSystemSounds,
                     Math.Clamp(loadedAudio.MaxSessions, 1, 24),
-                    NormalizeAudioApps(loadedAudio.VisibleSessionMatches)),
+                    NormalizeAudioApps(loadedAudio.VisibleSessionMatches),
+                    loadedAudio.SelectedEndpointId?.Trim() ?? string.Empty),
                 new DiscordPreferencesSnapshot(
                     loadedDiscord.Enabled,
                     loadedDiscord.RelayUrl,
@@ -134,7 +140,8 @@ public sealed class DashboardPreferencesStore
                     NormalizeDiscordId(loadedDiscord.VoiceChannelId, defaults.Discord.VoiceChannelId),
                     NormalizeDiscordId(loadedDiscord.TrackedUserId, defaults.Discord.TrackedUserId),
                     Math.Clamp(loadedDiscord.LatestMessagesCount, 1, 20),
-                    NormalizeDiscordIds(loadedDiscord.FavoriteUserIds)));
+                    NormalizeDiscordIds(loadedDiscord.FavoriteUserIds)),
+                NormalizeLayoutPreferences(loaded.Layout, defaults.Layout));
         }
         catch (Exception ex)
         {
@@ -150,7 +157,8 @@ public sealed class DashboardPreferencesStore
             new AudioPreferencesSnapshot(
                 settings.Audio.IncludeSystemSounds,
                 Math.Clamp(settings.Audio.MaxSessions, 1, 24),
-                NormalizeAudioApps(settings.Audio.VisibleSessionMatches)),
+                NormalizeAudioApps(settings.Audio.VisibleSessionMatches),
+                settings.Audio.SelectedEndpointId?.Trim() ?? string.Empty),
             new DiscordPreferencesSnapshot(
                 settings.Discord.Enabled,
                 settings.Discord.RelayUrl,
@@ -161,7 +169,8 @@ public sealed class DashboardPreferencesStore
                 settings.Discord.VoiceChannelId == 0 ? string.Empty : settings.Discord.VoiceChannelId.ToString(),
                 settings.Discord.TrackedUserId == 0 ? string.Empty : settings.Discord.TrackedUserId.ToString(),
                 Math.Clamp(settings.Discord.LatestMessagesCount, 1, 20),
-                settings.Discord.FavoriteUserIds.Select(id => id.ToString()).ToArray()));
+                settings.Discord.FavoriteUserIds.Select(id => id.ToString()).ToArray()),
+            DashboardLayoutPreferencesSnapshot.Default);
     }
 
     private void PersistUnsafe()
@@ -224,6 +233,146 @@ public sealed class DashboardPreferencesStore
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static DashboardLayoutPreferencesSnapshot NormalizeLayoutPreferences(
+        DashboardLayoutPreferencesSnapshot? candidate,
+        DashboardLayoutPreferencesSnapshot fallback)
+    {
+        if (candidate is null)
+        {
+            return fallback;
+        }
+
+        return new DashboardLayoutPreferencesSnapshot(
+            NormalizeLayoutMode(candidate.Desktop, fallback.Desktop),
+            NormalizeLayoutMode(candidate.TabletLandscape, fallback.TabletLandscape),
+            NormalizeLayoutMode(candidate.PhoneLandscape, fallback.PhoneLandscape));
+    }
+
+    private static DashboardLayoutPreferencesSnapshot MergeLayoutPreferences(
+        DashboardLayoutPreferencesSnapshot current,
+        DashboardLayoutPreferencesUpdate update)
+    {
+        if (update.Reset is true)
+        {
+            return DashboardLayoutPreferencesSnapshot.Default;
+        }
+
+        var profile = NormalizeLayoutProfile(update.Profile);
+        if (profile is null)
+        {
+            return current;
+        }
+
+        return profile switch
+        {
+            "desktop" => current with
+            {
+                Desktop = MergeLayoutMode(current.Desktop, update, DashboardLayoutPreferencesSnapshot.Default.Desktop)
+            },
+            "tablet-landscape" => current with
+            {
+                TabletLandscape = MergeLayoutMode(current.TabletLandscape, update, DashboardLayoutPreferencesSnapshot.Default.TabletLandscape)
+            },
+            "phone-landscape" => current with
+            {
+                PhoneLandscape = MergeLayoutMode(current.PhoneLandscape, update, DashboardLayoutPreferencesSnapshot.Default.PhoneLandscape)
+            },
+            _ => current
+        };
+    }
+
+    private static DashboardLayoutModeSnapshot MergeLayoutMode(
+        DashboardLayoutModeSnapshot current,
+        DashboardLayoutPreferencesUpdate update,
+        DashboardLayoutModeSnapshot defaults)
+    {
+        if (update.Reset is true)
+        {
+            return defaults;
+        }
+
+        var columns = Math.Clamp(update.Columns ?? current.Columns, 1, 24);
+        var rows = Math.Clamp(update.Rows ?? current.Rows, 1, 24);
+        var panels = update.Panels is null
+            ? current.Panels
+            : MergePanelLayouts(current.Panels, update.Panels, columns, rows);
+
+        return NormalizeLayoutMode(new DashboardLayoutModeSnapshot(columns, rows, panels), defaults);
+    }
+
+    private static DashboardPanelLayoutSnapshot[] MergePanelLayouts(
+        IReadOnlyList<DashboardPanelLayoutSnapshot> current,
+        IReadOnlyList<DashboardPanelLayoutUpdate> updates,
+        int columns,
+        int rows)
+    {
+        var byKey = current.ToDictionary(panel => panel.Key, StringComparer.OrdinalIgnoreCase);
+        foreach (var update in updates)
+        {
+            if (!byKey.TryGetValue(update.Key, out var existing))
+            {
+                continue;
+            }
+
+            var x = ClampPosition(update.X ?? existing.X, columns);
+            var y = ClampPosition(update.Y ?? existing.Y, rows);
+            var w = ClampSpan(update.W ?? existing.W, columns, x);
+            var h = ClampSpan(update.H ?? existing.H, rows, y);
+            byKey[update.Key] = existing with { X = x, Y = y, W = w, H = h };
+        }
+
+        return PanelCatalog
+            .Select(panel => byKey.TryGetValue(panel.Key, out var layout)
+                ? layout
+                : new DashboardPanelLayoutSnapshot(panel.Key, 1, 1, 1, 1))
+            .ToArray();
+    }
+
+    private static DashboardLayoutModeSnapshot NormalizeLayoutMode(
+        DashboardLayoutModeSnapshot? candidate,
+        DashboardLayoutModeSnapshot fallback)
+    {
+        if (candidate is null)
+        {
+            return fallback;
+        }
+
+        var columns = Math.Clamp(candidate.Columns, 1, 24);
+        var rows = Math.Clamp(candidate.Rows, 1, 24);
+        var source = candidate.Panels?.ToDictionary(panel => panel.Key, StringComparer.OrdinalIgnoreCase)
+            ?? new Dictionary<string, DashboardPanelLayoutSnapshot>(StringComparer.OrdinalIgnoreCase);
+
+        var panels = PanelCatalog.Select(panel =>
+        {
+            if (!source.TryGetValue(panel.Key, out var layout))
+            {
+                layout = fallback.Panels.First(item => string.Equals(item.Key, panel.Key, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var x = ClampPosition(layout.X, columns);
+            var y = ClampPosition(layout.Y, rows);
+            var w = ClampSpan(layout.W, columns, x);
+            var h = ClampSpan(layout.H, rows, y);
+            return layout with { Key = panel.Key, X = x, Y = y, W = w, H = h };
+        }).ToArray();
+
+        return new DashboardLayoutModeSnapshot(columns, rows, panels);
+    }
+
+    private static int ClampPosition(int value, int max) => Math.Clamp(value, 1, max);
+
+    private static int ClampSpan(int value, int max, int start) => Math.Clamp(value, 1, Math.Max(1, max - start + 1));
+
+    private static string? NormalizeLayoutProfile(string? profile)
+    {
+        var normalized = profile?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "desktop" or "tablet-landscape" or "phone-landscape" => normalized,
+            _ => null
+        };
     }
 
     private static DashboardPreferencesSnapshot SanitizeForEditor(DashboardPreferencesSnapshot current)
