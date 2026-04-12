@@ -9,6 +9,14 @@
     { id: "graphite-wave", label: "Graphite Wave" }
   ];
 
+  const settingsTabs = [
+    { key: "panels", label: "Panels" },
+    { key: "audio", label: "Audio" },
+    { key: "layout", label: "Layout" },
+    { key: "discord", label: "Discord" },
+    { key: "spotify", label: "Spotify" }
+  ];
+
   let snapshot = null;
   let editorState = null;
   let localMedia = [];
@@ -44,8 +52,9 @@
   const defaultPanelKeys = ["temps", "network", "discord", "spotify", "audio", "processes", "system"];
 
   let panelForm = [];
-  let audioAppForm = [];
-  let audioForm = { includeSystemSounds: true, maxSessions: 12, selectedEndpointId: "" };
+  let audioTargetForm = [];
+  let audioForm = { includeSystemSounds: true, maxSessions: 12, showDeviceLabels: true };
+  let settingsSection = "panels";
   let discordForm = { enabled: false, relayUrl: "", apiKey: "", guildId: "", messagesChannelId: "", voiceChannelId: "", trackedUserId: "", latestMessagesCount: 6, favoriteUserIds: "" };
   let spotifyForm = { enabled: false, clientId: "", status: "Client ID required" };
   let themeForm = { presetId: "neon-grid", pexelsApiKey: "" };
@@ -61,6 +70,9 @@
   let layoutColumnsValue = 12;
   let layoutRowsValue = 12;
   let panelSizeFlags = {};
+  let panelView = {};
+  let dashboardCssText = "";
+  let dockCssText = "";
 
   $: preferences = editorState?.preferences ?? null;
   $: visiblePanels = new Set((preferences?.visiblePanels ?? []).map((item) => String(item).toLowerCase()));
@@ -75,6 +87,25 @@
   $: shownSpotifyVolume = spotifyVolumePreview ?? spotifyNow?.volumePercent ?? 0;
   $: audioSessions = (snapshot?.audio?.sessions ?? []).map(applyOptimisticAudioState);
   $: audioRows = Math.max(1, Math.ceil((audioSessions.length || 0) / 2));
+  $: audioInventory = editorState?.audioInventory ?? { outputDevices: [], inputDevices: [] };
+  $: outputAudioDevices = audioInventory.outputDevices ?? [];
+  $: inputAudioDevices = audioInventory.inputDevices ?? [];
+  $: allInputsMuted = inputAudioDevices.length > 0 && inputAudioDevices.every((device) => device.isMuted);
+  $: discordOutputSessions = outputAudioDevices.flatMap((device) =>
+    (device.sessions ?? []).filter((session) => isDiscordSession(session)).map((session) => ({ ...session, endpointId: device.id, endpointName: device.name })));
+  $: discordOutputsMuted = discordOutputSessions.length > 0 && discordOutputSessions.every((session) => session.isMuted);
+  $: dashboardCssText = `${layoutProfile ? `grid-template-areas:none;grid-template-columns:repeat(${layoutProfile.columns},minmax(0,1fr));grid-template-rows:repeat(${layoutProfile.rows},minmax(0,1fr));grid-auto-rows:minmax(0,1fr);--layout-columns:${layoutProfile.columns};--layout-rows:${layoutProfile.rows};` : ""}${layoutMode === "phone-landscape" ? `transform:scale(${fitScale});width:${fitWidth};height:${fitHeight};margin-left:${fitMarginLeft};` : ""}`;
+  $: dockCssText = `left:${resolvedDockPosition.x}px;top:${resolvedDockPosition.y}px;`;
+  $: panelView = Object.fromEntries(defaultPanelKeys.map((key) => {
+    const panel = layoutProfile?.panels?.find((item) => String(item.key).toLowerCase() === key);
+    return [key, {
+      visible: visiblePanels.has(key),
+      style: panel ? `grid-column:${panel.x} / span ${panel.w};grid-row:${panel.y} / span ${panel.h};` : "",
+      locked: !!panel?.locked,
+      compact: !!panelSizeFlags[key]?.compact,
+      tiny: !!panelSizeFlags[key]?.tiny
+    }];
+  }));
   $: if (typeof document !== "undefined") {
     document.body.dataset.themePreset = themePresetId;
   }
@@ -155,11 +186,21 @@
       if (snapshotResponse.ok) snapshot = await snapshotResponse.json();
       if (settingsResponse.ok) {
         editorState = await settingsResponse.json();
-        syncForms();
+        syncForms(editorState);
       }
       if (mediaResponse.ok) localMedia = await mediaResponse.json();
       hydrateFromQuery();
       syncSpotifyTimer();
+    } catch {
+    }
+  }
+
+  async function refreshEditorState() {
+    try {
+      const response = await fetch("/api/settings", { cache: "no-store" });
+      if (!response.ok) return;
+      editorState = await response.json();
+      syncForms(editorState);
     } catch {
     }
   }
@@ -201,37 +242,41 @@
     history.replaceState({}, "", `${location.pathname}${query.size ? `?${query.toString()}` : ""}`);
   }
 
-  function syncForms() {
-    if (!preferences) return;
+  function syncForms(state = editorState) {
+    const currentPreferences = state?.preferences;
+    if (!currentPreferences) return;
     layoutEditorProfile = layoutEditorProfile || profileKey;
-    panelForm = [...(preferences.visiblePanels ?? [])];
-    audioAppForm = [...(preferences.audio?.visibleSessionMatches ?? [])];
+    panelForm = [...(currentPreferences.visiblePanels ?? [])];
+    audioTargetForm = (currentPreferences.audio?.visibleDeviceSessions ?? []).map((target) => ({
+      endpointId: target.endpointId,
+      sessionName: target.sessionName
+    }));
     audioForm = {
-      includeSystemSounds: !!preferences.audio?.includeSystemSounds,
-      maxSessions: Number(preferences.audio?.maxSessions ?? 12),
-      selectedEndpointId: preferences.audio?.selectedEndpointId ?? ""
+      includeSystemSounds: !!currentPreferences.audio?.includeSystemSounds,
+      maxSessions: Number(currentPreferences.audio?.maxSessions ?? 12),
+      showDeviceLabels: currentPreferences.audio?.showDeviceLabels ?? true
     };
     discordForm = {
-      enabled: !!preferences.discord?.enabled,
-      relayUrl: preferences.discord?.relayUrl ?? "",
+      enabled: !!currentPreferences.discord?.enabled,
+      relayUrl: currentPreferences.discord?.relayUrl ?? "",
       apiKey: "",
-      guildId: preferences.discord?.guildId ?? "",
-      messagesChannelId: preferences.discord?.messagesChannelId ?? "",
-      voiceChannelId: preferences.discord?.voiceChannelId ?? "",
-      trackedUserId: preferences.discord?.trackedUserId ?? "",
-      latestMessagesCount: Number(preferences.discord?.latestMessagesCount ?? 6),
-      favoriteUserIds: Array.isArray(preferences.discord?.favoriteUserIds) ? preferences.discord.favoriteUserIds.join("\n") : ""
+      guildId: currentPreferences.discord?.guildId ?? "",
+      messagesChannelId: currentPreferences.discord?.messagesChannelId ?? "",
+      voiceChannelId: currentPreferences.discord?.voiceChannelId ?? "",
+      trackedUserId: currentPreferences.discord?.trackedUserId ?? "",
+      latestMessagesCount: Number(currentPreferences.discord?.latestMessagesCount ?? 6),
+      favoriteUserIds: Array.isArray(currentPreferences.discord?.favoriteUserIds) ? currentPreferences.discord.favoriteUserIds.join("\n") : ""
     };
     spotifyForm = {
-      enabled: !!preferences.spotify?.enabled,
-      clientId: preferences.spotify?.clientId ?? "",
-      status: preferences.spotify?.isAuthorized ? "Connected" : (preferences.spotify?.clientId ? "Ready to connect" : "Client ID required")
+      enabled: !!currentPreferences.spotify?.enabled,
+      clientId: currentPreferences.spotify?.clientId ?? "",
+      status: currentPreferences.spotify?.isAuthorized ? "Connected" : (currentPreferences.spotify?.clientId ? "Ready to connect" : "Client ID required")
     };
     themeForm = {
-      presetId: preferences.theme?.presetId ?? "neon-grid",
+      presetId: currentPreferences.theme?.presetId ?? "neon-grid",
       pexelsApiKey: ""
     };
-    const editorLayout = getActiveLayoutProfile(preferences.layout, currentLayoutEditorProfile(), viewportWidth, viewportHeight);
+    const editorLayout = getActiveLayoutProfile(currentPreferences.layout, currentLayoutEditorProfile(), viewportWidth, viewportHeight);
     layoutColumnsValue = Number(editorLayout?.columns ?? 12);
     layoutRowsValue = Number(editorLayout?.rows ?? 12);
   }
@@ -244,11 +289,29 @@
     });
     if (!response.ok) throw new Error("Failed to save settings");
     editorState = await response.json();
-    syncForms();
+    syncForms(editorState);
   }
 
-  const savePanels = () => saveSettings({ visiblePanels: panelForm });
-  const saveAudio = () => saveSettings({ audio: { includeSystemSounds: audioForm.includeSystemSounds, maxSessions: Number(audioForm.maxSessions), visibleSessionMatches: audioAppForm, selectedEndpointId: audioForm.selectedEndpointId } });
+  async function openSettingsDrawer() {
+    if (dockInteractionsLocked()) return;
+    const next = !settingsOpen;
+    settingsOpen = next;
+    themeOpen = false;
+    if (next) {
+      await refreshEditorState();
+    }
+  }
+
+  const saveAudio = () => saveSettings({
+    audio: {
+      includeSystemSounds: audioForm.includeSystemSounds,
+      maxSessions: Number(audioForm.maxSessions),
+      showDeviceLabels: audioForm.showDeviceLabels,
+      visibleSessionMatches: [],
+      selectedEndpointId: "",
+      visibleDeviceSessions: audioTargetForm.map((target) => ({ endpointId: target.endpointId, sessionName: target.sessionName }))
+    }
+  });
 
   function dockInteractionsLocked() {
     return Date.now() < dockInteractionLockUntil;
@@ -356,10 +419,6 @@
     return null;
   }
 
-  function dockStyle() {
-    return `left:${resolvedDockPosition.x}px;top:${resolvedDockPosition.y}px;`;
-  }
-
   function toggleLayoutEditing() {
     layoutEditing = !layoutEditing;
     layoutPreview = null;
@@ -441,7 +500,7 @@
       }
     });
     layoutPreview = null;
-    syncForms();
+    syncForms(editorState);
   }
 
   function startDockDrag(event) {
@@ -459,6 +518,20 @@
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top
     };
+  }
+
+  function startDockSurfaceDrag(event) {
+    if (!layoutEditing || layoutProfile?.dock?.locked) return;
+    const interactive = event.target instanceof Element
+      ? event.target.closest("button, a, input, select, textarea, label")
+      : null;
+    if (interactive) return;
+    startDockDrag(event);
+  }
+
+  function startDockLinksDrag(event) {
+    if (!layoutEditing || layoutProfile?.dock?.locked) return;
+    startDockDrag(event);
   }
 
   async function toggleDockLock() {
@@ -506,6 +579,20 @@
       grabOffsetX: event.clientX - panelRect.left,
       grabOffsetY: event.clientY - panelRect.top
     };
+  }
+
+  function startPanelSurfaceDrag(event, panelKey) {
+    if (!layoutEditing) return;
+    const interactive = event.target instanceof Element
+      ? event.target.closest("button, a, input, select, textarea, label")
+      : null;
+    if (interactive) return;
+    startLayoutDrag(event, panelKey, "move");
+  }
+
+  function handlePanelPointerDown(event, panelKey) {
+    if (!layoutEditing) return;
+    startPanelSurfaceDrag(event, panelKey);
   }
 
   async function togglePanelLock(panelKey) {
@@ -962,20 +1049,6 @@
     return Math.min(max, Math.max(min, numeric));
   }
 
-  const panelStyle = (key) => {
-    const panel = layoutProfile?.panels?.find((item) => String(item.key).toLowerCase() === key);
-    return panel ? `grid-column:${panel.x} / span ${panel.w};grid-row:${panel.y} / span ${panel.h};` : "";
-  };
-  const panelLayoutState = (key) => {
-    const panel = layoutProfile?.panels?.find((item) => String(item.key).toLowerCase() === key);
-    return {
-      locked: !!panel?.locked,
-      compact: !!panelSizeFlags[key]?.compact,
-      tiny: !!panelSizeFlags[key]?.tiny
-    };
-  };
-  const dashboardStyle = () => `${layoutProfile ? `grid-template-areas:none;grid-template-columns:repeat(${layoutProfile.columns},minmax(0,1fr));grid-template-rows:repeat(${layoutProfile.rows},minmax(0,1fr));grid-auto-rows:minmax(0,1fr);--layout-columns:${layoutProfile.columns};--layout-rows:${layoutProfile.rows};` : ""}${layoutMode === "phone-landscape" ? `transform:scale(${fitScale});width:${fitWidth};height:${fitHeight};margin-left:${fitMarginLeft};` : ""}`;
-  const visible = (key) => visiblePanels.has(key);
   const formatNumber = (value) => Number(value || 0).toFixed(0);
   const pointsFor = (values) => {
     const items = Array.isArray(values) && values.length ? values : [0];
@@ -1011,18 +1084,116 @@
     return original.replace(/[()]+/g, " ").replace(/\s{2,}/g, " ").trim() || (isDefault ? "Default" : "Audio Device");
   };
   const settingsMask = (value) => String(value ?? "").trim() || "No key saved yet.";
+  const isDiscordSession = (session) => String(session?.name ?? "").trim().toLowerCase() === "discord";
 
-  function togglePanel(panelKey) {
-    const current = new Set(panelForm.map((item) => String(item).toLowerCase()));
-    if (current.has(panelKey) && current.size === 1) return;
-    current.has(panelKey) ? current.delete(panelKey) : current.add(panelKey);
-    panelForm = Array.from(current);
+  function patchAudioInventory(mutator) {
+    if (!editorState?.audioInventory) return;
+    const nextInventory = structuredClone(editorState.audioInventory);
+    mutator(nextInventory);
+    editorState = { ...editorState, audioInventory: nextInventory };
   }
 
-  function toggleAudioApp(appName) {
-    const current = new Set(audioAppForm);
-    current.has(appName) ? current.delete(appName) : current.add(appName);
-    audioAppForm = Array.from(current);
+  function patchOutputMaster(endpointId, patch) {
+    patchAudioInventory((inventory) => {
+      inventory.outputDevices = (inventory.outputDevices ?? []).map((device) =>
+        device.id === endpointId
+          ? { ...device, master: { ...device.master, ...patch } }
+          : device);
+    });
+  }
+
+  function patchAllInputMute(nextMuted) {
+    patchAudioInventory((inventory) => {
+      inventory.inputDevices = (inventory.inputDevices ?? []).map((device) => ({ ...device, isMuted: nextMuted }));
+    });
+  }
+
+  function patchDiscordOutputsMute(nextMuted) {
+    patchAudioInventory((inventory) => {
+      inventory.outputDevices = (inventory.outputDevices ?? []).map((device) => ({
+        ...device,
+        sessions: (device.sessions ?? []).map((session) =>
+          isDiscordSession(session)
+            ? { ...session, isMuted: nextMuted }
+            : session)
+      }));
+    });
+  }
+
+  function refreshEditorStateSoon(delayMs = 320) {
+    setTimeout(() => {
+      if (settingsOpen) {
+        refreshEditorState();
+      }
+    }, delayMs);
+  }
+
+  async function togglePanel(panelKey) {
+    const current = new Set(panelForm.map((item) => String(item).toLowerCase()));
+    const normalizedKey = String(panelKey).toLowerCase();
+    if (current.has(normalizedKey) && current.size === 1) return;
+    current.has(normalizedKey) ? current.delete(normalizedKey) : current.add(normalizedKey);
+    const nextPanels = Array.from(current);
+    panelForm = nextPanels;
+    editorState = editorState
+      ? {
+          ...editorState,
+          preferences: {
+            ...editorState.preferences,
+            visiblePanels: nextPanels
+          }
+        }
+      : editorState;
+    try {
+      await saveSettings({ visiblePanels: nextPanels });
+    } catch {
+      await loadInitial();
+    }
+  }
+
+  function hasVisibleAudioTarget(endpointId, sessionName) {
+    return audioTargetForm.some((target) =>
+      target.endpointId === endpointId && target.sessionName.toLowerCase() === String(sessionName).toLowerCase());
+  }
+
+  function visibleTargetsForDevice(endpointId) {
+    return audioTargetForm.filter((target) => target.endpointId === endpointId).length;
+  }
+
+  async function toggleAudioTarget(endpointId, sessionName) {
+    const normalizedName = String(sessionName).trim();
+    const exists = hasVisibleAudioTarget(endpointId, normalizedName);
+    const nextTargets = exists
+      ? audioTargetForm.filter((target) => !(target.endpointId === endpointId && target.sessionName.toLowerCase() === normalizedName.toLowerCase()))
+      : [...audioTargetForm, { endpointId, sessionName: normalizedName }];
+    audioTargetForm = nextTargets;
+    editorState = editorState
+      ? {
+          ...editorState,
+          preferences: {
+            ...editorState.preferences,
+            audio: {
+              ...editorState.preferences.audio,
+              showDeviceLabels: audioForm.showDeviceLabels,
+              visibleDeviceSessions: nextTargets.map((target) => ({ endpointId: target.endpointId, sessionName: target.sessionName }))
+            }
+          }
+        }
+      : editorState;
+    try {
+      await saveSettings({
+        audio: {
+          includeSystemSounds: audioForm.includeSystemSounds,
+          maxSessions: Number(audioForm.maxSessions),
+          showDeviceLabels: audioForm.showDeviceLabels,
+          visibleSessionMatches: [],
+          selectedEndpointId: "",
+          visibleDeviceSessions: nextTargets.map((target) => ({ endpointId: target.endpointId, sessionName: target.sessionName }))
+        }
+      });
+    } catch {
+      await loadInitial();
+    }
   }
 
   const themePages = () => {
@@ -1088,6 +1259,51 @@
     const nextMuted = !session.isMuted;
     updateOptimisticAudioState(session.id, { isMuted: nextMuted }, 2500);
     wsSend({ type: "setMute", sessionId: session.id, value: nextMuted ? 1 : 0 });
+  }
+
+  function onInventoryMasterInput(endpointId, event) {
+    const sessionId = `master-output|${endpointId}`;
+    const volumePercent = Number(event.currentTarget.value);
+    patchOutputMaster(endpointId, { volumePercent });
+    throttleCommand(`audio:${sessionId}:volume`, () => wsSend({ type: "setVolume", sessionId, value: volumePercent / 100 }), 75);
+  }
+
+  function onInventoryMasterChange(endpointId, event) {
+    const sessionId = `master-output|${endpointId}`;
+    const volumePercent = Number(event.currentTarget.value);
+    patchOutputMaster(endpointId, { volumePercent });
+    wsSend({ type: "setVolume", sessionId, value: volumePercent / 100 });
+    refreshEditorStateSoon();
+  }
+
+  function onInventoryMasterMute(device) {
+    const sessionId = `master-output|${device.id}`;
+    const nextMuted = !device.master.isMuted;
+    patchOutputMaster(device.id, { isMuted: nextMuted });
+    wsSend({ type: "setMute", sessionId, value: nextMuted ? 1 : 0 });
+    refreshEditorStateSoon();
+  }
+
+  function toggleAllInputsMute() {
+    const nextMuted = !allInputsMuted;
+    patchAllInputMute(nextMuted);
+    wsSend({ type: "setAllInputMute", value: nextMuted ? 1 : 0 });
+    refreshEditorStateSoon();
+  }
+
+  function toggleDiscordOutputsMute() {
+    const nextMuted = !discordOutputsMuted;
+    patchDiscordOutputsMute(nextMuted);
+    wsSend({ type: "setDiscordOutputsMute", value: nextMuted ? 1 : 0 });
+    refreshEditorStateSoon();
+  }
+
+  function toggleDiscordPrivacyMode() {
+    const nextMuted = !(allInputsMuted && discordOutputsMuted);
+    patchAllInputMute(nextMuted);
+    patchDiscordOutputsMute(nextMuted);
+    wsSend({ type: "setDiscordPrivacyMode", value: nextMuted ? 1 : 0 });
+    refreshEditorStateSoon();
   }
 
   function finalizeSliderInteraction(slider) {
@@ -1162,22 +1378,22 @@
 </div>
 <div class="theme-media-scrim"></div>
 
-<div class={`floating-dock ${(layoutProfile?.dock?.orientation === "vertical") ? "is-vertical" : ""}`.trim()} bind:this={floatingDockEl} style={dockStyle()}>
-  <div class={`floating-dock-edit ${dockControlsHidden ? "is-collapsed" : ""}`.trim()} bind:this={floatingDockEditEl}>
+<div class={`floating-dock ${(layoutProfile?.dock?.orientation === "vertical") ? "is-vertical" : ""} ${layoutEditing && !(layoutProfile?.dock?.locked) ? "is-draggable" : ""}`.trim()} role="group" aria-label="Studio controls" bind:this={floatingDockEl} style={dockCssText} on:pointerdown={startDockSurfaceDrag}>
+  <div class={`floating-dock-edit ${dockControlsHidden ? "is-collapsed" : ""}`.trim()} role="presentation" bind:this={floatingDockEditEl} on:pointerdown={startDockSurfaceDrag}>
     <button class="dock-move-handle" type="button" aria-label="Move controls" on:pointerdown={startDockDrag}>Move</button>
     <button class={`dock-orientation-toggle ${(layoutProfile?.dock?.orientation === "vertical") ? "is-active" : ""}`.trim()} type="button" aria-label="Switch controls orientation" on:click={toggleDockOrientation}>{layoutProfile?.dock?.orientation === "vertical" ? "Vertical" : "Horizontal"}</button>
     <button class={`dock-lock-toggle ${(layoutProfile?.dock?.locked) ? "is-locked" : ""}`.trim()} type="button" aria-label={(layoutProfile?.dock?.locked) ? "Unlock controls" : "Lock controls"} on:click={toggleDockLock}>{(layoutProfile?.dock?.locked) ? "Locked" : "Lock"}</button>
     <button class="dock-visibility-toggle" hidden={dockControlsHidden} type="button" aria-label="Hide layout controls" on:click={toggleDockControlsHidden}>Hide</button>
   </div>
-  <div class="floating-dock-main">
-    <div class="client-mode-links">
-      <a class="client-mode-link is-active" href="/studio/">Studio</a>
-      <a class="client-mode-link" href="/vanilla/">Vanilla</a>
+  <div class="floating-dock-main" role="presentation" on:pointerdown={startDockSurfaceDrag}>
+    <div class={`client-mode-links ${layoutEditing && !(layoutProfile?.dock?.locked) ? "is-drag-handle" : ""}`.trim()} role="presentation" on:pointerdown={startDockLinksDrag}>
+      <a class="client-mode-link is-active" href="/studio/" on:pointerdown={startDockLinksDrag}>Studio</a>
+      <a class="client-mode-link" href="/vanilla/" on:pointerdown={startDockLinksDrag}>Vanilla</a>
       <button class="dock-reveal-toggle" hidden={!layoutEditing || !dockControlsHidden} type="button" aria-label="Show layout controls" on:click={toggleDockControlsHidden}>↑</button>
     </div>
-    <button class={`theme-toggle ${themeOpen ? "is-active" : ""}`.trim()} type="button" aria-label="Open theme studio" on:click={() => { if (dockInteractionsLocked()) return; themeOpen = !themeOpen; settingsOpen = false; }}>✦</button>
+      <button class={`theme-toggle ${themeOpen ? "is-active" : ""}`.trim()} type="button" aria-label="Open theme studio" on:click={() => { if (dockInteractionsLocked()) return; themeOpen = !themeOpen; settingsOpen = false; }}>✦</button>
     <button class="fullscreen-toggle" type="button" aria-label="Toggle fullscreen" on:click={() => { if (dockInteractionsLocked()) return; toggleFullscreen(); }}>⤢</button>
-    <button class="settings-toggle" type="button" aria-label="Open live controls" on:click={() => { if (dockInteractionsLocked()) return; settingsOpen = !settingsOpen; themeOpen = false; }}>⚙</button>
+    <button class="settings-toggle" type="button" aria-label="Open live controls" on:click={openSettingsDrawer}>⚙</button>
     <button class={`layout-toggle ${layoutEditing ? "is-active" : ""}`.trim()} type="button" aria-label={layoutEditing ? "Lock layout editing" : "Unlock layout editing"} on:click={toggleLayoutEditing}>{layoutEditing ? "Lock" : "Grid"}</button>
   </div>
 </div>
@@ -1196,114 +1412,192 @@
     <button class="settings-close" type="button" on:click={() => (settingsOpen = false)}>✕</button>
   </div>
 
-  <section class="settings-section">
-    <div class="section-title">Panels</div>
-    <div class="toggle-grid">
-      {#each editorState?.availablePanels ?? [] as panel}
-        <button class={`toggle-pill ${panelForm.map((value) => value.toLowerCase()).includes(panel.key) ? "is-active" : ""}`.trim()} type="button" on:click={() => togglePanel(panel.key)}>{panel.label}</button>
+  <div class="settings-workspace">
+    <nav class="settings-nav" aria-label="Settings sections">
+      {#each settingsTabs as tab}
+        <button class={`settings-nav-pill ${settingsSection === tab.key ? "is-active" : ""}`.trim()} type="button" on:click={() => (settingsSection = tab.key)}>{tab.label}</button>
       {/each}
-    </div>
-    <div class="settings-row media-search-actions">
-      <button class="ghost-button" type="button" on:click={savePanels}>Apply</button>
-    </div>
-  </section>
+    </nav>
 
-  <section class="settings-section">
-    <div class="section-title">Audio Slots</div>
-    <div class="settings-range-row">
-      <label class="settings-label" for="settings-max-sessions">Visible mixer rows</label>
-      <div class="settings-range-value">{audioForm.maxSessions}</div>
-    </div>
-      <input id="settings-max-sessions" name="settings-max-sessions" class="settings-range" type="range" min="1" max="16" step="1" bind:value={audioForm.maxSessions}>
-    <label class="settings-switch">
-      <input id="settings-include-system-sounds" name="settings-include-system-sounds" type="checkbox" bind:checked={audioForm.includeSystemSounds}>
-      <span>Include system sounds</span>
-    </label>
-  </section>
+    <div class="settings-content">
+      {#if settingsSection === "panels"}
+        <section class="settings-section">
+          <div class="section-title">Panels</div>
+          <div class="settings-subtitle">Show only the panels you want on this device layout.</div>
+          <div class="toggle-grid">
+            {#each editorState?.availablePanels ?? [] as panel}
+              <button class={`toggle-pill ${panelForm.map((value) => value.toLowerCase()).includes(panel.key) ? "is-active" : ""}`.trim()} type="button" on:click={() => togglePanel(panel.key)}>{panel.label}</button>
+            {/each}
+          </div>
+        </section>
+      {/if}
 
-  <section class="settings-section">
-    <div class="settings-row">
-      <div class="section-title">Audio Apps</div>
-      <button class="ghost-button" type="button" on:click={() => (audioAppForm = [])}>Show all</button>
-    </div>
-    <div class="settings-subtitle">Select only the apps you want in the mixer. If none are selected, all active apps stay visible.</div>
-    <div class="toggle-grid audio-app-grid">
-      {#each Array.from(new Set([...(editorState?.availableAudioApps ?? []), ...audioAppForm])) as appName}
-        <button class={`toggle-pill ${audioAppForm.includes(appName) ? "is-active" : ""}`.trim()} type="button" on:click={() => toggleAudioApp(appName)}>{appName}</button>
-      {/each}
-    </div>
-    <div class="settings-row media-search-actions">
-      <button class="ghost-button" type="button" on:click={saveAudio}>Apply</button>
-    </div>
-  </section>
+      {#if settingsSection === "audio"}
+        <div class="settings-panel-grid settings-panel-grid-audio">
+          <section class="settings-section">
+            <div class="settings-row">
+              <div class="section-title">Mixer Scope</div>
+              <button class="ghost-button" type="button" on:click={saveAudio}>Apply</button>
+            </div>
+            <div class="settings-subtitle">Pick how many rows the mixer can use, then tick the app and device targets you want exposed in the panel.</div>
+            <div class="settings-range-row">
+              <label class="settings-label" for="settings-max-sessions">Visible mixer rows</label>
+              <div class="settings-range-value">{audioForm.maxSessions}</div>
+            </div>
+            <input id="settings-max-sessions" name="settings-max-sessions" class="settings-range" type="range" min="1" max="16" step="1" bind:value={audioForm.maxSessions}>
+            <label class="settings-switch">
+              <input id="settings-include-system-sounds" name="settings-include-system-sounds" type="checkbox" bind:checked={audioForm.includeSystemSounds}>
+              <span>Include system sounds</span>
+            </label>
+            <label class="settings-switch">
+              <input id="settings-show-device-labels" name="settings-show-device-labels" type="checkbox" bind:checked={audioForm.showDeviceLabels}>
+              <span>Show output device labels in mixer</span>
+            </label>
+            <div class="settings-inline-actions">
+              <button class={`ghost-button ${allInputsMuted ? "is-active" : ""}`.trim()} type="button" on:click={toggleAllInputsMute}>{allInputsMuted ? "Unmute all mics" : "Mute all mics"}</button>
+              <button class={`ghost-button ${discordOutputsMuted ? "is-active" : ""}`.trim()} type="button" disabled={!discordOutputSessions.length} on:click={toggleDiscordOutputsMute}>{discordOutputsMuted ? "Unmute Discord outputs" : "Mute Discord outputs"}</button>
+              <button class={`ghost-button ${allInputsMuted && discordOutputsMuted ? "is-active" : ""}`.trim()} type="button" disabled={!inputAudioDevices.length && !discordOutputSessions.length} on:click={toggleDiscordPrivacyMode}>{(allInputsMuted && discordOutputsMuted) ? "Restore Discord privacy" : "Mute mic + Discord"}</button>
+            </div>
+          </section>
 
-  <section class="settings-section">
-    <div class="settings-row">
-      <div class="section-title">Layout Studio</div>
-      <button class="ghost-button" type="button" on:click={resetLayoutProfile}>Reset</button>
-    </div>
-    <div class="settings-subtitle">Customize snap density for the current device. Panel placement is edited directly on the dashboard and saved per screen size.</div>
-    <div class="settings-form-grid">
-      <label class="settings-field">
-        <span class="settings-field-label">Profile</span>
-        <select id="settings-layout-profile" name="settings-layout-profile" class="settings-input" bind:value={layoutEditorProfile} on:change={syncLayoutEditorFields}>
-          <option value="desktop">Desktop</option>
-          <option value="tablet-landscape">Tablet Landscape</option>
-          <option value="phone-landscape">Phone Landscape</option>
-        </select>
-      </label>
-      <label class="settings-field">
-        <span class="settings-field-label">Snap Columns</span>
-        <input id="settings-layout-columns" name="settings-layout-columns" class="settings-input" type="number" min="1" max="120" step="1" bind:value={layoutColumnsValue} on:change={applyLayoutFields}>
-      </label>
-      <label class="settings-field">
-        <span class="settings-field-label">Snap Rows</span>
-        <input id="settings-layout-rows" name="settings-layout-rows" class="settings-input" type="number" min="1" max="120" step="1" bind:value={layoutRowsValue} on:change={applyLayoutFields}>
-      </label>
-    </div>
-  </section>
-  <section class="settings-section">
-    <div class="settings-row">
-      <div class="section-title">Discord Relay</div>
-      <button class="ghost-button" type="button" on:click={saveDiscord}>Apply</button>
-    </div>
-    <div class="settings-subtitle">The bot token stays on your hosted relay.</div>
-    <label class="settings-switch">
-      <input id="settings-discord-enabled" name="settings-discord-enabled" type="checkbox" bind:checked={discordForm.enabled}>
-      <span>Enable Discord panel</span>
-    </label>
-    <div class="settings-form-grid">
-      <label class="settings-field"><span class="settings-field-label">Relay URL</span><input id="settings-discord-relay-url" name="settings-discord-relay-url" class="settings-input" type="url" bind:value={discordForm.relayUrl}></label>
-      <label class="settings-field"><span class="settings-field-label">Relay API key</span><input id="settings-discord-api-key" name="settings-discord-api-key" class="settings-input" type="password" autocomplete="new-password" bind:value={discordForm.apiKey}><span class="settings-hint">{settingsMask(preferences?.discord?.apiKeyHint)}</span></label>
-      <label class="settings-field"><span class="settings-field-label">Guild ID</span><input id="settings-discord-guild-id" name="settings-discord-guild-id" class="settings-input" type="text" bind:value={discordForm.guildId}></label>
-      <label class="settings-field"><span class="settings-field-label">Messages channel ID</span><input id="settings-discord-messages-channel-id" name="settings-discord-messages-channel-id" class="settings-input" type="text" bind:value={discordForm.messagesChannelId}></label>
-      <label class="settings-field"><span class="settings-field-label">Fallback voice channel ID</span><input id="settings-discord-voice-channel-id" name="settings-discord-voice-channel-id" class="settings-input" type="text" bind:value={discordForm.voiceChannelId}></label>
-      <label class="settings-field"><span class="settings-field-label">Tracked user ID</span><input id="settings-discord-tracked-user-id" name="settings-discord-tracked-user-id" class="settings-input" type="text" bind:value={discordForm.trackedUserId}></label>
-      <label class="settings-field"><span class="settings-field-label">Latest messages</span><input id="settings-discord-latest-messages" name="settings-discord-latest-messages" class="settings-input" type="number" min="1" max="20" step="1" bind:value={discordForm.latestMessagesCount}></label>
-      <label class="settings-field settings-field-full"><span class="settings-field-label">Favorite user IDs</span><textarea id="settings-discord-favorite-users" name="settings-discord-favorite-users" class="settings-input settings-textarea" rows="4" bind:value={discordForm.favoriteUserIds}></textarea></label>
-    </div>
-  </section>
+          <section class="settings-section">
+            <div class="section-title">Inputs</div>
+            <div class="settings-subtitle">Current capture devices and mute state.</div>
+            {#if inputAudioDevices.length}
+              <div class="device-chip-row">
+                {#each inputAudioDevices as inputDevice}
+                  <div class={`device-chip ${inputDevice.isMuted ? "is-muted" : ""}`.trim()}>
+                    <span>{inputDevice.name}</span>
+                    <span>{inputDevice.isMuted ? "Muted" : `${inputDevice.volumePercent}%`}</span>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="mini-card"><div class="footer-note">No active input devices detected.</div></div>
+            {/if}
+          </section>
 
-  <section class="settings-section">
-    <div class="settings-row">
-      <div class="section-title">Spotify</div>
-      <div class="settings-inline-actions">
-        <button class="ghost-button" type="button" on:click={saveSpotify}>Apply</button>
-        <button class="ghost-button" type="button" on:click={connectSpotify}>Connect</button>
-        <button class="ghost-button" type="button" on:click={disconnectSpotify}>Disconnect</button>
-      </div>
+          <section class="settings-section settings-section-full">
+            <div class="settings-row">
+              <div>
+                <div class="section-title">Audio Devices & Processes</div>
+                <div class="settings-subtitle">Tick exact device and app rows to show in the mixer. Multiple devices can stay visible at the same time.</div>
+              </div>
+              <button class="ghost-button" type="button" on:click={saveAudio}>Save targets</button>
+            </div>
+            <div class="device-card-list">
+              {#each outputAudioDevices as device}
+                <article class={`device-card ${device.isSelected ? "is-selected" : ""}`.trim()}>
+                  <div class="settings-row">
+                    <div>
+                      <div class="device-card-title">{device.name}</div>
+                      <div class="settings-hint">{device.isDefault ? "Default output" : "Output device"} · {(device.sessions?.length ?? 0)} process{(device.sessions?.length ?? 0) === 1 ? "" : "es"}</div>
+                    </div>
+                    <div class="settings-hint">{visibleTargetsForDevice(device.id)} visible</div>
+                  </div>
+                  <div class="device-master-row">
+                    <div class="settings-hint">Device volume</div>
+                    <div class="device-master-controls">
+                      <input class="settings-range device-master-slider" type="range" min="0" max="100" step="1" value={device.master.volumePercent} on:input={(event) => onInventoryMasterInput(device.id, event)} on:change={(event) => onInventoryMasterChange(device.id, event)}>
+                      <div class="settings-range-value">{device.master.volumePercent}%</div>
+                      <button class={`mute-button ${device.master.isMuted ? "is-muted" : ""}`.trim()} type="button" aria-label={device.master.isMuted ? "Unmute device" : "Mute device"} on:click={() => onInventoryMasterMute(device)}>{device.master.isMuted ? "🔇" : "🔊"}</button>
+                    </div>
+                  </div>
+                  <div class="device-chip-row">
+                    <button class={`device-chip ${hasVisibleAudioTarget(device.id, device.master.name) ? "is-selected" : ""} ${device.master.isMuted ? "is-muted" : ""}`.trim()} type="button" on:click={() => toggleAudioTarget(device.id, device.master.name)}>
+                      <span>{device.master.name}</span>
+                      <span>{device.master.volumePercent}%</span>
+                    </button>
+                    {#each device.sessions ?? [] as session}
+                      <button class={`device-chip ${hasVisibleAudioTarget(device.id, session.name) ? "is-selected" : ""} ${session.isMuted ? "is-muted" : ""} ${isDiscordSession(session) ? "is-discord" : ""}`.trim()} type="button" title={session.detail || session.name} on:click={() => toggleAudioTarget(device.id, session.name)}>
+                        <span>{session.name}</span>
+                        <span>{session.isMuted ? "Muted" : `${session.volumePercent}%`}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </article>
+              {/each}
+            </div>
+          </section>
+        </div>
+      {/if}
+
+      {#if settingsSection === "layout"}
+        <section class="settings-section">
+          <div class="settings-row">
+            <div class="section-title">Layout Studio</div>
+            <button class="ghost-button" type="button" on:click={resetLayoutProfile}>Reset</button>
+          </div>
+          <div class="settings-subtitle">Customize snap density for the current device. Panel placement is edited directly on the dashboard and saved per screen size.</div>
+          <div class="settings-form-grid">
+            <label class="settings-field">
+              <span class="settings-field-label">Profile</span>
+              <select id="settings-layout-profile" name="settings-layout-profile" class="settings-input" bind:value={layoutEditorProfile} on:change={syncLayoutEditorFields}>
+                <option value="desktop">Desktop</option>
+                <option value="tablet-landscape">Tablet Landscape</option>
+                <option value="phone-landscape">Phone Landscape</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              <span class="settings-field-label">Snap Columns</span>
+              <input id="settings-layout-columns" name="settings-layout-columns" class="settings-input" type="number" min="1" max="120" step="1" bind:value={layoutColumnsValue} on:change={applyLayoutFields}>
+            </label>
+            <label class="settings-field">
+              <span class="settings-field-label">Snap Rows</span>
+              <input id="settings-layout-rows" name="settings-layout-rows" class="settings-input" type="number" min="1" max="120" step="1" bind:value={layoutRowsValue} on:change={applyLayoutFields}>
+            </label>
+          </div>
+        </section>
+      {/if}
+
+      {#if settingsSection === "discord"}
+        <section class="settings-section">
+          <div class="settings-row">
+            <div class="section-title">Discord Relay</div>
+            <button class="ghost-button" type="button" on:click={saveDiscord}>Apply</button>
+          </div>
+          <div class="settings-subtitle">The bot token stays on your hosted relay.</div>
+          <label class="settings-switch">
+            <input id="settings-discord-enabled" name="settings-discord-enabled" type="checkbox" bind:checked={discordForm.enabled}>
+            <span>Enable Discord panel</span>
+          </label>
+          <div class="settings-form-grid">
+            <label class="settings-field"><span class="settings-field-label">Relay URL</span><input id="settings-discord-relay-url" name="settings-discord-relay-url" class="settings-input" type="url" bind:value={discordForm.relayUrl}></label>
+            <label class="settings-field"><span class="settings-field-label">Relay API key</span><input id="settings-discord-api-key" name="settings-discord-api-key" class="settings-input" type="password" autocomplete="new-password" bind:value={discordForm.apiKey}><span class="settings-hint">{settingsMask(preferences?.discord?.apiKeyHint)}</span></label>
+            <label class="settings-field"><span class="settings-field-label">Guild ID</span><input id="settings-discord-guild-id" name="settings-discord-guild-id" class="settings-input" type="text" bind:value={discordForm.guildId}></label>
+            <label class="settings-field"><span class="settings-field-label">Messages channel ID</span><input id="settings-discord-messages-channel-id" name="settings-discord-messages-channel-id" class="settings-input" type="text" bind:value={discordForm.messagesChannelId}></label>
+            <label class="settings-field"><span class="settings-field-label">Fallback voice channel ID</span><input id="settings-discord-voice-channel-id" name="settings-discord-voice-channel-id" class="settings-input" type="text" bind:value={discordForm.voiceChannelId}></label>
+            <label class="settings-field"><span class="settings-field-label">Tracked user ID</span><input id="settings-discord-tracked-user-id" name="settings-discord-tracked-user-id" class="settings-input" type="text" bind:value={discordForm.trackedUserId}></label>
+            <label class="settings-field"><span class="settings-field-label">Latest messages</span><input id="settings-discord-latest-messages" name="settings-discord-latest-messages" class="settings-input" type="number" min="1" max="20" step="1" bind:value={discordForm.latestMessagesCount}></label>
+            <label class="settings-field settings-field-full"><span class="settings-field-label">Favorite user IDs</span><textarea id="settings-discord-favorite-users" name="settings-discord-favorite-users" class="settings-input settings-textarea" rows="4" bind:value={discordForm.favoriteUserIds}></textarea></label>
+          </div>
+        </section>
+      {/if}
+
+      {#if settingsSection === "spotify"}
+        <section class="settings-section">
+          <div class="settings-row">
+            <div class="section-title">Spotify</div>
+            <div class="settings-inline-actions">
+              <button class="ghost-button" type="button" on:click={saveSpotify}>Apply</button>
+              <button class="ghost-button" type="button" on:click={connectSpotify}>Connect</button>
+              <button class="ghost-button" type="button" on:click={disconnectSpotify}>Disconnect</button>
+            </div>
+          </div>
+          <div class="settings-subtitle">Playback commands require an active Spotify device, and most controls require Spotify Premium.</div>
+          <label class="settings-switch">
+            <input id="settings-spotify-enabled" name="settings-spotify-enabled" type="checkbox" bind:checked={spotifyForm.enabled}>
+            <span>Enable Spotify panel</span>
+          </label>
+          <div class="settings-form-grid">
+            <label class="settings-field"><span class="settings-field-label">Client ID</span><input id="settings-spotify-client-id" name="settings-spotify-client-id" class="settings-input" type="text" bind:value={spotifyForm.clientId}></label>
+            <label class="settings-field"><span class="settings-field-label">Redirect URI</span><input id="settings-spotify-redirect-uri" name="settings-spotify-redirect-uri" class="settings-input" type="text" readonly value={`${location.origin}/api/spotify/connect/callback`}></label>
+            <label class="settings-field settings-field-full"><span class="settings-field-label">Status</span><input id="settings-spotify-status" name="settings-spotify-status" class="settings-input" type="text" readonly value={spotifyForm.status}></label>
+          </div>
+        </section>
+      {/if}
     </div>
-    <div class="settings-subtitle">Playback commands require an active Spotify device, and most controls require Spotify Premium.</div>
-    <label class="settings-switch">
-      <input id="settings-spotify-enabled" name="settings-spotify-enabled" type="checkbox" bind:checked={spotifyForm.enabled}>
-      <span>Enable Spotify panel</span>
-    </label>
-    <div class="settings-form-grid">
-      <label class="settings-field"><span class="settings-field-label">Client ID</span><input id="settings-spotify-client-id" name="settings-spotify-client-id" class="settings-input" type="text" bind:value={spotifyForm.clientId}></label>
-      <label class="settings-field"><span class="settings-field-label">Redirect URI</span><input id="settings-spotify-redirect-uri" name="settings-spotify-redirect-uri" class="settings-input" type="text" readonly value={`${location.origin}/api/spotify/connect/callback`}></label>
-      <label class="settings-field settings-field-full"><span class="settings-field-label">Status</span><input id="settings-spotify-status" name="settings-spotify-status" class="settings-input" type="text" readonly value={spotifyForm.status}></label>
-    </div>
-  </section>
+  </div>
   </form>
 </aside>
 
@@ -1414,14 +1708,14 @@
   </form>
 </aside>
 <div class="dashboard-viewport" bind:this={viewportEl}>
-  <main class="dashboard" bind:this={dashboardEl} style={dashboardStyle()}>
-    <section data-panel="temps" class={`panel panel-temps ${!visible("temps") ? "is-hidden" : ""} ${panelLayoutState("temps").locked ? "is-layout-locked" : ""} ${panelLayoutState("temps").compact ? "is-layout-compact" : ""} ${panelLayoutState("temps").tiny ? "is-layout-tiny" : ""}`.trim()} style={panelStyle("temps")}>
+  <main class="dashboard" bind:this={dashboardEl} style={dashboardCssText}>
+    <section role="group" aria-label="Hardware Temperatures panel" data-panel="temps" class={`panel panel-temps ${!panelView.temps?.visible ? "is-hidden" : ""} ${panelView.temps?.locked ? "is-layout-locked" : ""} ${panelView.temps?.compact ? "is-layout-compact" : ""} ${panelView.temps?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.temps?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "temps")}>
       <header class="panel-header"><span class="eyebrow">Hardware Temperatures</span></header>
       {#if layoutEditing}
-        <div class="layout-shell">
+        <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "temps", "move")}>Move</button>
-          <button class={`layout-lock-toggle ${panelLayoutState("temps").locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelLayoutState("temps").locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("temps")}>{panelLayoutState("temps").locked ? "Locked" : "Lock"}</button>
-          <div class="layout-panel-tag">{panelLayoutState("temps").tiny ? "" : "Temps"}</div>
+          <button class={`layout-lock-toggle ${panelView.temps?.locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelView.temps?.locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("temps")}>{panelView.temps?.locked ? "Locked" : "Lock"}</button>
+          <div class="layout-panel-tag">{panelView.temps?.tiny ? "" : "Temps"}</div>
           <button class="layout-resize-handle" type="button" aria-label="Resize panel" on:pointerdown={(event) => startLayoutDrag(event, "temps", "resize")}>◢</button>
         </div>
       {/if}
@@ -1439,13 +1733,13 @@
       <div class="warning-text">{snapshot?.temps?.warning ?? ""}</div>
     </section>
 
-    <section data-panel="network" class={`panel panel-network ${!visible("network") ? "is-hidden" : ""} ${panelLayoutState("network").locked ? "is-layout-locked" : ""} ${panelLayoutState("network").compact ? "is-layout-compact" : ""} ${panelLayoutState("network").tiny ? "is-layout-tiny" : ""}`.trim()} style={panelStyle("network")}>
+    <section role="group" aria-label="Network panel" data-panel="network" class={`panel panel-network ${!panelView.network?.visible ? "is-hidden" : ""} ${panelView.network?.locked ? "is-layout-locked" : ""} ${panelView.network?.compact ? "is-layout-compact" : ""} ${panelView.network?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.network?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "network")}>
       <header class="panel-header"><span class="eyebrow">Network</span></header>
       {#if layoutEditing}
-        <div class="layout-shell">
+        <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "network", "move")}>Move</button>
-          <button class={`layout-lock-toggle ${panelLayoutState("network").locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelLayoutState("network").locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("network")}>{panelLayoutState("network").locked ? "Locked" : "Lock"}</button>
-          <div class="layout-panel-tag">{panelLayoutState("network").tiny ? "" : "Network"}</div>
+          <button class={`layout-lock-toggle ${panelView.network?.locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelView.network?.locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("network")}>{panelView.network?.locked ? "Locked" : "Lock"}</button>
+          <div class="layout-panel-tag">{panelView.network?.tiny ? "" : "Network"}</div>
           <button class="layout-resize-handle" type="button" aria-label="Resize panel" on:pointerdown={(event) => startLayoutDrag(event, "network", "resize")}>◢</button>
         </div>
       {/if}
@@ -1465,13 +1759,13 @@
       </div>
     </section>
 
-    <section data-panel="discord" class={`panel panel-discord ${!visible("discord") ? "is-hidden" : ""} ${!snapshot?.discord?.enabled ? "is-disabled" : ""} ${panelLayoutState("discord").locked ? "is-layout-locked" : ""} ${panelLayoutState("discord").compact ? "is-layout-compact" : ""} ${panelLayoutState("discord").tiny ? "is-layout-tiny" : ""}`.trim()} style={panelStyle("discord")}>
+    <section role="group" aria-label="Discord panel" data-panel="discord" class={`panel panel-discord ${!panelView.discord?.visible ? "is-hidden" : ""} ${!snapshot?.discord?.enabled ? "is-disabled" : ""} ${panelView.discord?.locked ? "is-layout-locked" : ""} ${panelView.discord?.compact ? "is-layout-compact" : ""} ${panelView.discord?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.discord?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "discord")}>
       <header class="panel-header"><span class="eyebrow">Discord</span><span class={`panel-state discord-state state-${snapshot?.discord?.enabled ? (snapshot.discord.connectionState === "connected" ? "connected" : "warning") : "disabled"}`}></span></header>
       {#if layoutEditing}
-        <div class="layout-shell">
+        <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "discord", "move")}>Move</button>
-          <button class={`layout-lock-toggle ${panelLayoutState("discord").locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelLayoutState("discord").locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("discord")}>{panelLayoutState("discord").locked ? "Locked" : "Lock"}</button>
-          <div class="layout-panel-tag">{panelLayoutState("discord").tiny ? "" : "Discord"}</div>
+          <button class={`layout-lock-toggle ${panelView.discord?.locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelView.discord?.locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("discord")}>{panelView.discord?.locked ? "Locked" : "Lock"}</button>
+          <div class="layout-panel-tag">{panelView.discord?.tiny ? "" : "Discord"}</div>
           <button class="layout-resize-handle" type="button" aria-label="Resize panel" on:pointerdown={(event) => startLayoutDrag(event, "discord", "resize")}>◢</button>
         </div>
       {/if}
@@ -1494,13 +1788,13 @@
       <div class="warning-text">{snapshot?.discord?.enabled ? (snapshot.discord.warning ?? "") : ""}</div>
     </section>
 
-    <section data-panel="spotify" class={`panel panel-spotify ${!visible("spotify") ? "is-hidden" : ""} ${!snapshot?.spotify?.enabled ? "is-disabled" : ""} ${panelLayoutState("spotify").locked ? "is-layout-locked" : ""} ${panelLayoutState("spotify").compact ? "is-layout-compact" : ""} ${panelLayoutState("spotify").tiny ? "is-layout-tiny" : ""}`.trim()} style={panelStyle("spotify")}>
+    <section role="group" aria-label="Spotify panel" data-panel="spotify" class={`panel panel-spotify ${!panelView.spotify?.visible ? "is-hidden" : ""} ${!snapshot?.spotify?.enabled ? "is-disabled" : ""} ${panelView.spotify?.locked ? "is-layout-locked" : ""} ${panelView.spotify?.compact ? "is-layout-compact" : ""} ${panelView.spotify?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.spotify?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "spotify")}>
       <header class="panel-header"><span class="eyebrow">Spotify</span><span class={`panel-state spotify-state state-${snapshot?.spotify?.enabled ? (snapshot.spotify.connectionState === "connected" ? "connected" : "warning") : "disabled"}`}></span></header>
       {#if layoutEditing}
-        <div class="layout-shell">
+        <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "spotify", "move")}>Move</button>
-          <button class={`layout-lock-toggle ${panelLayoutState("spotify").locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelLayoutState("spotify").locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("spotify")}>{panelLayoutState("spotify").locked ? "Locked" : "Lock"}</button>
-          <div class="layout-panel-tag">{panelLayoutState("spotify").tiny ? "" : "Spotify"}</div>
+          <button class={`layout-lock-toggle ${panelView.spotify?.locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelView.spotify?.locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("spotify")}>{panelView.spotify?.locked ? "Locked" : "Lock"}</button>
+          <div class="layout-panel-tag">{panelView.spotify?.tiny ? "" : "Spotify"}</div>
           <button class="layout-resize-handle" type="button" aria-label="Resize panel" on:pointerdown={(event) => startLayoutDrag(event, "spotify", "resize")}>◢</button>
         </div>
       {/if}
@@ -1536,20 +1830,28 @@
       <div class="warning-text">{spotifyNow ? (snapshot?.spotify?.warning ?? "") : ""}</div>
     </section>
 
-    <section data-panel="audio" class={`panel panel-audio ${!visible("audio") ? "is-hidden" : ""} ${panelLayoutState("audio").locked ? "is-layout-locked" : ""} ${panelLayoutState("audio").compact ? "is-layout-compact" : ""} ${panelLayoutState("audio").tiny ? "is-layout-tiny" : ""}`.trim()} style={panelStyle("audio")}>
-      <header class="panel-header"><span class="eyebrow">Audio Mixer</span><label class="audio-device-picker"><select id="audio-device-picker" name="audio-device-picker" class="audio-device-select" bind:value={audioForm.selectedEndpointId} on:change={saveAudio} title={snapshot?.audio?.endpoints?.find((item) => item.id === audioForm.selectedEndpointId)?.name ?? ""}>{#each snapshot?.audio?.endpoints ?? [] as endpoint}<option value={endpoint.id}>{compactEndpointName(endpoint.name, endpoint.isDefault)}</option>{/each}</select></label></header>
+    <section role="group" aria-label="Audio Mixer panel" data-panel="audio" class={`panel panel-audio ${!panelView.audio?.visible ? "is-hidden" : ""} ${panelView.audio?.locked ? "is-layout-locked" : ""} ${panelView.audio?.compact ? "is-layout-compact" : ""} ${panelView.audio?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.audio?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "audio")}>
+      <header class="panel-header"><span class="eyebrow">Audio Mixer</span></header>
       {#if layoutEditing}
-        <div class="layout-shell">
+        <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "audio", "move")}>Move</button>
-          <button class={`layout-lock-toggle ${panelLayoutState("audio").locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelLayoutState("audio").locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("audio")}>{panelLayoutState("audio").locked ? "Locked" : "Lock"}</button>
-          <div class="layout-panel-tag">{panelLayoutState("audio").tiny ? "" : "Audio"}</div>
+          <button class={`layout-lock-toggle ${panelView.audio?.locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelView.audio?.locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("audio")}>{panelView.audio?.locked ? "Locked" : "Lock"}</button>
+          <div class="layout-panel-tag">{panelView.audio?.tiny ? "" : "Audio"}</div>
           <button class="layout-resize-handle" type="button" aria-label="Resize panel" on:pointerdown={(event) => startLayoutDrag(event, "audio", "resize")}>◢</button>
         </div>
       {/if}
       <div class={`audio-list ${(layoutMode === "tablet-landscape" || layoutMode === "phone-landscape") ? "is-grid" : ""}`.trim()}>
         {#if audioSessions.length}
           {#each audioSessions as session}
-            <div class="audio-row"><strong class="audio-name" title={session.detail || session.name}>{session.name}</strong><div class="slider-wrap"><input id={`audio-slider-${session.id}`} name={`audio-slider-${session.id}`} data-session-id={session.id} class="slider" type="range" min="0" max="100" step="1" value={session.volumePercent} on:input={(event) => onAudioInput(session.id, event)} on:change={(event) => onAudioChange(session.id, event)}><div class="metric-value small">{session.volumePercent}%</div><button class={`mute-button ${session.isMuted ? "is-muted" : ""}`.trim()} type="button" on:click={() => onAudioMute(session)}>{session.isMuted ? "🔇" : "🔊"}</button></div></div>
+            <div class="audio-row">
+              <div class="audio-copy">
+                <strong class="audio-name" title={session.detail || session.name}>{session.name}</strong>
+                {#if audioForm.showDeviceLabels && session.detail}
+                  <span class="footer-note audio-detail">{session.detail}</span>
+                {/if}
+              </div>
+              <div class="slider-wrap"><input id={`audio-slider-${session.id}`} name={`audio-slider-${session.id}`} data-session-id={session.id} class="slider" type="range" min="0" max="100" step="1" value={session.volumePercent} on:input={(event) => onAudioInput(session.id, event)} on:change={(event) => onAudioChange(session.id, event)}><div class="metric-value small">{session.volumePercent}%</div><button class={`mute-button ${session.isMuted ? "is-muted" : ""}`.trim()} type="button" on:click={() => onAudioMute(session)}>{session.isMuted ? "🔇" : "🔊"}</button></div>
+            </div>
           {/each}
         {:else}
           <div class="mini-card"><div class="footer-note">No active audio sessions.</div></div>
@@ -1558,26 +1860,26 @@
       <div class="warning-text">{snapshot?.audio?.warning ?? ""}</div>
     </section>
 
-    <section data-panel="processes" class={`panel panel-processes ${!visible("processes") ? "is-hidden" : ""} ${panelLayoutState("processes").locked ? "is-layout-locked" : ""} ${panelLayoutState("processes").compact ? "is-layout-compact" : ""} ${panelLayoutState("processes").tiny ? "is-layout-tiny" : ""}`.trim()} style={panelStyle("processes")}>
+    <section role="group" aria-label="Processes panel" data-panel="processes" class={`panel panel-processes ${!panelView.processes?.visible ? "is-hidden" : ""} ${panelView.processes?.locked ? "is-layout-locked" : ""} ${panelView.processes?.compact ? "is-layout-compact" : ""} ${panelView.processes?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.processes?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "processes")}>
       <header class="panel-header"><span class="eyebrow">Processes</span></header>
       {#if layoutEditing}
-        <div class="layout-shell">
+        <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "processes", "move")}>Move</button>
-          <button class={`layout-lock-toggle ${panelLayoutState("processes").locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelLayoutState("processes").locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("processes")}>{panelLayoutState("processes").locked ? "Locked" : "Lock"}</button>
-          <div class="layout-panel-tag">{panelLayoutState("processes").tiny ? "" : "Processes"}</div>
+          <button class={`layout-lock-toggle ${panelView.processes?.locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelView.processes?.locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("processes")}>{panelView.processes?.locked ? "Locked" : "Lock"}</button>
+          <div class="layout-panel-tag">{panelView.processes?.tiny ? "" : "Processes"}</div>
           <button class="layout-resize-handle" type="button" aria-label="Resize panel" on:pointerdown={(event) => startLayoutDrag(event, "processes", "resize")}>◢</button>
         </div>
       {/if}
       <div id="processes-list">{#each snapshot?.processes?.topProcesses ?? [] as process}<div class="process-row"><div class="process-meta"><strong>{process.name}</strong><span class="footer-note">{process.cpuPercent.toFixed(1)}% CPU · {process.memoryMb.toFixed(0)} MB</span></div><div class="process-bar bar-track"><div class={`bar-fill ${process.cpuPercent > 60 ? "danger" : process.cpuPercent > 25 ? "warning" : ""}`} style={`width:${Math.min(process.cpuPercent, 100)}%`}></div></div></div>{/each}</div>
     </section>
 
-    <section data-panel="system" class={`panel panel-system ${!visible("system") ? "is-hidden" : ""} ${panelLayoutState("system").locked ? "is-layout-locked" : ""} ${panelLayoutState("system").compact ? "is-layout-compact" : ""} ${panelLayoutState("system").tiny ? "is-layout-tiny" : ""}`.trim()} style={panelStyle("system")}>
+    <section role="group" aria-label="System Info panel" data-panel="system" class={`panel panel-system ${!panelView.system?.visible ? "is-hidden" : ""} ${panelView.system?.locked ? "is-layout-locked" : ""} ${panelView.system?.compact ? "is-layout-compact" : ""} ${panelView.system?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.system?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "system")}>
       <header class="panel-header"><span class="eyebrow">System Info</span></header>
       {#if layoutEditing}
-        <div class="layout-shell">
+        <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "system", "move")}>Move</button>
-          <button class={`layout-lock-toggle ${panelLayoutState("system").locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelLayoutState("system").locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("system")}>{panelLayoutState("system").locked ? "Locked" : "Lock"}</button>
-          <div class="layout-panel-tag">{panelLayoutState("system").tiny ? "" : "System"}</div>
+          <button class={`layout-lock-toggle ${panelView.system?.locked ? "is-locked" : ""}`.trim()} type="button" aria-label={panelView.system?.locked ? "Unlock panel" : "Lock panel"} on:click={() => togglePanelLock("system")}>{panelView.system?.locked ? "Locked" : "Lock"}</button>
+          <div class="layout-panel-tag">{panelView.system?.tiny ? "" : "System"}</div>
           <button class="layout-resize-handle" type="button" aria-label="Resize panel" on:pointerdown={(event) => startLayoutDrag(event, "system", "resize")}>◢</button>
         </div>
       {/if}

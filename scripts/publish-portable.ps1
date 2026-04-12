@@ -75,7 +75,9 @@ Notes:
   - This package is self-contained and does not require a separate .NET runtime.
   - Local-only files like dashboard.user.json are intentionally excluded from the package.
   - Settings persist in %LocalAppData%\GamingDashboard\dashboard.user.json after first run.
-  - Studio is available at /studio and Vanilla remains available at /vanilla.
+  - Studio is available at /studio and is the promoted Svelte client.
+  - Studio Legacy remains available at /studio-legacy and Vanilla remains available at /vanilla.
+  - Studio Next remains available at /studio-next for direct testing/debugging.
 "@
 
 Set-Content -Path (Join-Path $publishDir "PORTABLE.txt") -Value $portableReadme -Encoding ASCII

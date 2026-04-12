@@ -164,7 +164,8 @@ public sealed record PanelOption(string Key, string Label);
 public sealed record DashboardEditorState(
     IReadOnlyList<PanelOption> AvailablePanels,
     DashboardPreferencesSnapshot Preferences,
-    IReadOnlyList<string> AvailableAudioApps);
+    IReadOnlyList<string> AvailableAudioApps,
+    AudioEditorInventorySnapshot AudioInventory);
 
 public sealed record DashboardPreferencesSnapshot(
     IReadOnlyList<string> VisiblePanels,
@@ -177,8 +178,33 @@ public sealed record DashboardPreferencesSnapshot(
 public sealed record AudioPreferencesSnapshot(
     bool IncludeSystemSounds,
     int MaxSessions,
+    bool ShowDeviceLabels,
     IReadOnlyList<string> VisibleSessionMatches,
-    string SelectedEndpointId);
+    string SelectedEndpointId,
+    IReadOnlyList<AudioVisibleTargetSnapshot> VisibleDeviceSessions);
+
+public sealed record AudioVisibleTargetSnapshot(
+    string EndpointId,
+    string SessionName);
+
+public sealed record AudioEditorInventorySnapshot(
+    IReadOnlyList<AudioOutputDeviceSnapshot> OutputDevices,
+    IReadOnlyList<AudioInputDeviceSnapshot> InputDevices);
+
+public sealed record AudioOutputDeviceSnapshot(
+    string Id,
+    string Name,
+    bool IsDefault,
+    bool IsSelected,
+    AudioSessionCard Master,
+    IReadOnlyList<AudioSessionCard> Sessions);
+
+public sealed record AudioInputDeviceSnapshot(
+    string Id,
+    string Name,
+    bool IsDefault,
+    int VolumePercent,
+    bool IsMuted);
 
 public sealed record DiscordPreferencesSnapshot(
     bool Enabled,
@@ -209,8 +235,14 @@ public sealed record DashboardPreferencesUpdate(
 public sealed record AudioPreferencesUpdate(
     bool? IncludeSystemSounds,
     int? MaxSessions,
+    bool? ShowDeviceLabels,
     IReadOnlyList<string>? VisibleSessionMatches,
-    string? SelectedEndpointId);
+    string? SelectedEndpointId,
+    IReadOnlyList<AudioVisibleTargetUpdate>? VisibleDeviceSessions);
+
+public sealed record AudioVisibleTargetUpdate(
+    string EndpointId,
+    string SessionName);
 
 public sealed record DashboardLayoutPreferencesSnapshot(
     DashboardLayoutModeSnapshot Desktop,

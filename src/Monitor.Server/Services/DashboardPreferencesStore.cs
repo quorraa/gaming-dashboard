@@ -51,11 +51,11 @@ public sealed class DashboardPreferencesStore
         }
     }
 
-    public DashboardEditorState GetEditorState(IReadOnlyList<string> availableAudioApps)
+    public DashboardEditorState GetEditorState(IReadOnlyList<string> availableAudioApps, AudioEditorInventorySnapshot audioInventory)
     {
         var current = Current;
         var mergedAudioApps = NormalizeAudioApps(current.Audio.VisibleSessionMatches.Concat(availableAudioApps));
-        return new DashboardEditorState(PanelCatalog, SanitizeForEditor(current), mergedAudioApps);
+        return new DashboardEditorState(PanelCatalog, SanitizeForEditor(current), mergedAudioApps, audioInventory);
     }
 
     public DashboardPreferencesSnapshot Update(DashboardPreferencesUpdate update)
@@ -71,10 +71,14 @@ public sealed class DashboardPreferencesStore
             var audio = new AudioPreferencesSnapshot(
                 audioUpdate?.IncludeSystemSounds ?? currentAudio.IncludeSystemSounds,
                 Math.Clamp(audioUpdate?.MaxSessions ?? currentAudio.MaxSessions, 1, 24),
+                audioUpdate?.ShowDeviceLabels ?? currentAudio.ShowDeviceLabels,
                 audioUpdate?.VisibleSessionMatches is null
                     ? currentAudio.VisibleSessionMatches
                     : NormalizeAudioApps(audioUpdate.VisibleSessionMatches),
-                audioUpdate?.SelectedEndpointId?.Trim() ?? currentAudio.SelectedEndpointId);
+                audioUpdate?.SelectedEndpointId?.Trim() ?? currentAudio.SelectedEndpointId,
+                audioUpdate?.VisibleDeviceSessions is null
+                    ? currentAudio.VisibleDeviceSessions
+                    : NormalizeVisibleTargets(audioUpdate.VisibleDeviceSessions.Select(target => new AudioVisibleTargetSnapshot(target.EndpointId, target.SessionName))));
 
             var discordUpdate = update.Discord;
             var currentDiscord = _current.Discord;
@@ -197,8 +201,10 @@ public sealed class DashboardPreferencesStore
                 new AudioPreferencesSnapshot(
                     loadedAudio.IncludeSystemSounds,
                     Math.Clamp(loadedAudio.MaxSessions, 1, 24),
+                    loadedAudio.ShowDeviceLabels,
                     NormalizeAudioApps(loadedAudio.VisibleSessionMatches),
-                    loadedAudio.SelectedEndpointId?.Trim() ?? string.Empty),
+                    loadedAudio.SelectedEndpointId?.Trim() ?? string.Empty,
+                    NormalizeVisibleTargets(loadedAudio.VisibleDeviceSessions)),
                 new DiscordPreferencesSnapshot(
                     loadedDiscord.Enabled,
                     loadedDiscord.RelayUrl,
@@ -232,8 +238,10 @@ public sealed class DashboardPreferencesStore
             new AudioPreferencesSnapshot(
                 settings.Audio.IncludeSystemSounds,
                 Math.Clamp(settings.Audio.MaxSessions, 1, 24),
+                settings.Audio.ShowDeviceLabels,
                 NormalizeAudioApps(settings.Audio.VisibleSessionMatches),
-                settings.Audio.SelectedEndpointId?.Trim() ?? string.Empty),
+                settings.Audio.SelectedEndpointId?.Trim() ?? string.Empty,
+                NormalizeVisibleTargets(settings.Audio.VisibleDeviceSessions.Select(target => new AudioVisibleTargetSnapshot(target.EndpointId, target.SessionName)))),
             new DiscordPreferencesSnapshot(
                 settings.Discord.Enabled,
                 settings.Discord.RelayUrl,
@@ -298,6 +306,24 @@ public sealed class DashboardPreferencesStore
             .Select(match => match.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(match => match, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static AudioVisibleTargetSnapshot[] NormalizeVisibleTargets(IEnumerable<AudioVisibleTargetSnapshot>? targets)
+    {
+        if (targets is null)
+        {
+            return [];
+        }
+
+        return targets
+            .Select(target => new AudioVisibleTargetSnapshot(
+                target.EndpointId?.Trim() ?? string.Empty,
+                target.SessionName?.Trim() ?? string.Empty))
+            .Where(target => !string.IsNullOrWhiteSpace(target.EndpointId) && !string.IsNullOrWhiteSpace(target.SessionName))
+            .DistinctBy(target => $"{target.EndpointId}|{target.SessionName}".ToLowerInvariant())
+            .OrderBy(target => target.EndpointId, StringComparer.Ordinal)
+            .ThenBy(target => target.SessionName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 

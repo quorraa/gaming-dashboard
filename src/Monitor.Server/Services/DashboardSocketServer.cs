@@ -107,6 +107,36 @@ public sealed class DashboardSocketServer(
 
                         break;
                     }
+                    case "setAllInputMute" when command.Value.HasValue:
+                    {
+                        if (audioMixerService.TrySetAllInputMute(command.Value.Value >= 0.5d))
+                        {
+                            QueueAudioRefreshSequence(cancellationToken);
+                        }
+
+                        break;
+                    }
+                    case "setDiscordOutputsMute" when command.Value.HasValue:
+                    {
+                        if (audioMixerService.TrySetDiscordOutputsMute(command.Value.Value >= 0.5d))
+                        {
+                            QueueAudioRefreshSequence(cancellationToken);
+                        }
+
+                        break;
+                    }
+                    case "setDiscordPrivacyMode" when command.Value.HasValue:
+                    {
+                        var nextMuted = command.Value.Value >= 0.5d;
+                        var changedOutputs = audioMixerService.TrySetDiscordOutputsMute(nextMuted);
+                        var changedInputs = audioMixerService.TrySetAllInputMute(nextMuted);
+                        if (changedOutputs || changedInputs)
+                        {
+                            QueueAudioRefreshSequence(cancellationToken);
+                        }
+
+                        break;
+                    }
                 }
             }
         }

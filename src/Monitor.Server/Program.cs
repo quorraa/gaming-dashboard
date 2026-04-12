@@ -89,7 +89,9 @@ app.MapGet("/", () => Results.Redirect("/studio/index.html"));
 app.MapGet("/favicon.ico", () => Results.NoContent());
 app.MapGet("/api/snapshot", (DashboardStateStore store) => Results.Json(store.Current));
 app.MapGet("/api/settings", (DashboardPreferencesStore preferencesStore, AudioMixerService audioMixerService) =>
-    Results.Json(preferencesStore.GetEditorState(audioMixerService.GetAvailableSessionNames())));
+    Results.Json(preferencesStore.GetEditorState(
+        audioMixerService.GetAvailableSessionNames(),
+        audioMixerService.GetEditorInventory())));
 app.MapPost("/api/settings", async (
     DashboardPreferencesUpdate update,
     DashboardPreferencesStore preferencesStore,
@@ -101,7 +103,9 @@ app.MapPost("/api/settings", async (
     preferencesStore.Update(update);
     var snapshot = await snapshotBuilder.BuildAsync(context.RequestAborted);
     await socketServer.BroadcastSnapshotAsync(snapshot, context.RequestAborted);
-    return Results.Json(preferencesStore.GetEditorState(audioMixerService.GetAvailableSessionNames()));
+    return Results.Json(preferencesStore.GetEditorState(
+        audioMixerService.GetAvailableSessionNames(),
+        audioMixerService.GetEditorInventory()));
 });
 app.MapGet("/api/media/library", (ThemeMediaService themeMediaService) =>
     Results.Json(themeMediaService.ListAssets()));

@@ -30,8 +30,16 @@ public sealed class AudioSettings
 {
     public int MaxSessions { get; set; } = 12;
     public bool IncludeSystemSounds { get; set; } = true;
+    public bool ShowDeviceLabels { get; set; } = true;
     public List<string> VisibleSessionMatches { get; set; } = [];
     public string SelectedEndpointId { get; set; } = string.Empty;
+    public List<AudioVisibleTargetSettings> VisibleDeviceSessions { get; set; } = [];
+}
+
+public sealed class AudioVisibleTargetSettings
+{
+    public string EndpointId { get; set; } = string.Empty;
+    public string SessionName { get; set; } = string.Empty;
 }
 
 public sealed class HwInfoSettings
