@@ -9,6 +9,61 @@
     { id: "graphite-wave", label: "Graphite Wave" }
   ];
 
+  const textTargets = [
+    { id: "panel-eyebrow", label: "Panel eyebrow", family: "eyebrow" },
+    { id: "section-title", label: "Section title", family: "section-title" },
+    { id: "temp-label", label: "Temperature label", family: "metric-label" },
+    { id: "temp-value", label: "Temperature value", family: "metric-value" },
+    { id: "network-label", label: "Network label", family: "metric-label" },
+    { id: "network-value", label: "Network value", family: "metric-value" },
+    { id: "discord-name", label: "Discord name", family: "card-title" },
+    { id: "discord-subtitle", label: "Discord subtitle", family: "metric-label" },
+    { id: "discord-meta", label: "Discord meta", family: "metric-label" },
+    { id: "discord-message", label: "Discord message", family: "body-text" },
+    { id: "spotify-title", label: "Spotify title", family: "spotify-title" },
+    { id: "spotify-meta-link", label: "Spotify artist / album", family: "spotify-meta" },
+    { id: "spotify-chip", label: "Spotify chips", family: "spotify-meta" },
+    { id: "spotify-device", label: "Spotify device", family: "spotify-meta" },
+    { id: "spotify-timing", label: "Spotify timing", family: "metric-label" },
+    { id: "spotify-volume", label: "Spotify volume value", family: "metric-value" },
+    { id: "audio-name", label: "Audio app name", family: "card-title" },
+    { id: "audio-detail", label: "Audio device label", family: "metric-label" },
+    { id: "audio-volume", label: "Audio volume value", family: "metric-value" },
+    { id: "process-name", label: "Process name", family: "card-title" },
+    { id: "process-meta", label: "Process stats", family: "metric-label" },
+    { id: "system-label", label: "System label", family: "system-label" },
+    { id: "system-value", label: "System value", family: "system-value" },
+    { id: "panel-state", label: "Panel state", family: "body-text" },
+    { id: "warning-text", label: "Warning text", family: "metric-label" }
+  ];
+
+  const fontOptions = [
+    { value: "Rajdhani, sans-serif", label: "Rajdhani" },
+    { value: "\"Orbitron\", sans-serif", label: "Orbitron" },
+    { value: "\"Segoe UI\", sans-serif", label: "Segoe UI" },
+    { value: "Arial, sans-serif", label: "Arial" },
+    { value: "\"Trebuchet MS\", sans-serif", label: "Trebuchet" },
+    { value: "Georgia, serif", label: "Georgia" },
+    { value: "\"Times New Roman\", serif", label: "Times New Roman" },
+    { value: "\"Courier New\", monospace", label: "Courier New" }
+  ];
+
+  const defaultTextFamilies = {
+    eyebrow: { fontFamily: "\"Orbitron\", sans-serif", color: "#7d86a7", fontWeight: 700, italic: false, uppercase: true, letterSpacingEm: 0.18, fontSizeRem: 0.68 },
+    "section-title": { fontFamily: "Rajdhani, sans-serif", color: "#edf1ff", fontWeight: 600, italic: false, uppercase: false, letterSpacingEm: 0.03, fontSizeRem: 0.96 },
+    "metric-value": { fontFamily: "Rajdhani, sans-serif", color: "#1fe2ff", fontWeight: 700, italic: false, uppercase: false, letterSpacingEm: 0.01, fontSizeRem: 1.55 },
+    "metric-label": { fontFamily: "Rajdhani, sans-serif", color: "#7d86a7", fontWeight: 500, italic: false, uppercase: false, letterSpacingEm: 0.03, fontSizeRem: 0.78 },
+    "card-title": { fontFamily: "Rajdhani, sans-serif", color: "#edf1ff", fontWeight: 700, italic: false, uppercase: false, letterSpacingEm: 0.02, fontSizeRem: 1.02 },
+    "body-text": { fontFamily: "Rajdhani, sans-serif", color: "#c9d3f0", fontWeight: 500, italic: false, uppercase: false, letterSpacingEm: 0.01, fontSizeRem: 0.88 },
+    "system-label": { fontFamily: "\"Orbitron\", sans-serif", color: "#7d86a7", fontWeight: 600, italic: false, uppercase: true, letterSpacingEm: 0.1, fontSizeRem: 0.68 },
+    "system-value": { fontFamily: "Rajdhani, sans-serif", color: "#edf1ff", fontWeight: 600, italic: false, uppercase: false, letterSpacingEm: 0.01, fontSizeRem: 0.94 },
+    "spotify-title": { fontFamily: "Rajdhani, sans-serif", color: "#edf1ff", fontWeight: 700, italic: false, uppercase: false, letterSpacingEm: 0.02, fontSizeRem: 1.06 },
+    "spotify-meta": { fontFamily: "Rajdhani, sans-serif", color: "#7d86a7", fontWeight: 500, italic: false, uppercase: false, letterSpacingEm: 0.01, fontSizeRem: 0.8 }
+  };
+
+  const defaultTextStyles = Object.fromEntries(
+    textTargets.map((target) => [target.id, { ...defaultTextFamilies[target.family] }]));
+
   const settingsTabs = [
     { key: "panels", label: "Panels" },
     { key: "audio", label: "Audio" },
@@ -65,6 +120,14 @@
   let discordForm = { enabled: false, relayUrl: "", apiKey: "", guildId: "", messagesChannelId: "", voiceChannelId: "", trackedUserId: "", latestMessagesCount: 6, favoriteUserIds: "" };
   let spotifyForm = { enabled: false, clientId: "", status: "Client ID required" };
   let themeForm = { presetId: "neon-grid", pexelsApiKey: "", dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 };
+  let typographyEditing = false;
+  let selectedTextRole = textTargets[0].id;
+  let typographyLinkFamily = false;
+  let selectedTextElement = null;
+  let typographyToolbarEl;
+  let typographyToolbarPosition = null;
+  let themeTypographyDraft = {};
+  let typographyPresetName = "";
   let layoutEditing = false;
   let layoutEditorProfile = "";
   let layoutPreview = null;
@@ -93,8 +156,16 @@
   $: effectiveBackground = sessionBackground ?? background;
   $: themePresetId = activeTheme.presetId;
   $: themeVisuals = activeTheme.visuals;
+  $: themeTypography = activeTheme.typography;
   $: themeRecentSearches = preferences?.theme?.recentSearches ?? [];
   $: themeFavoriteAssets = preferences?.theme?.favoriteAssets ?? [];
+  $: themeTypographyPresets = preferences?.theme?.typographyPresets ?? [];
+  $: effectiveThemeTypography = (themeOpen || typographyEditing) ? mergeTypography(themeTypography, themeTypographyDraft) : themeTypography;
+  $: typographyCssText = buildTypographyCssText(effectiveThemeTypography);
+  $: selectedTextStyle = currentSelectedTextStyle();
+  $: typographyToolbarStyle = typographyToolbarPosition
+    ? `left:${typographyToolbarPosition.left}px;top:${typographyToolbarPosition.top}px;`
+    : "";
   $: effectiveThemeVisuals = themeOpen
     ? {
         dimPercent: Number(themeForm.dimPercent ?? themeVisuals?.dimPercent ?? 42),
@@ -117,7 +188,7 @@
   $: discordOutputSessions = outputAudioDevices.flatMap((device) =>
     (device.sessions ?? []).filter((session) => isDiscordSession(session)).map((session) => ({ ...session, endpointId: device.id, endpointName: device.name })));
   $: discordOutputsMuted = discordOutputSessions.length > 0 && discordOutputSessions.every((session) => session.isMuted);
-  $: dashboardCssText = `${layoutProfile ? `grid-template-areas:none;grid-template-columns:repeat(${layoutProfile.columns},minmax(0,1fr));grid-template-rows:repeat(${layoutProfile.rows},minmax(0,1fr));grid-auto-rows:minmax(0,1fr);--layout-columns:${layoutProfile.columns};--layout-rows:${layoutProfile.rows};` : ""}${layoutMode === "phone-landscape" ? `transform:scale(${fitScale});width:${fitWidth};height:${fitHeight};margin-left:${fitMarginLeft};` : ""}`;
+  $: dashboardCssText = `${layoutProfile ? `grid-template-areas:none;grid-template-columns:repeat(${layoutProfile.columns},minmax(0,1fr));grid-template-rows:repeat(${layoutProfile.rows},minmax(0,1fr));grid-auto-rows:minmax(0,1fr);--layout-columns:${layoutProfile.columns};--layout-rows:${layoutProfile.rows};` : ""}${layoutMode === "phone-landscape" ? `transform:scale(${fitScale});width:${fitWidth};height:${fitHeight};margin-left:${fitMarginLeft};` : ""}${typographyCssText}`;
   $: dockCssText = `left:${resolvedDockPosition.x}px;top:${resolvedDockPosition.y}px;`;
   $: panelView = Object.fromEntries(defaultPanelKeys.map((key) => {
     const panel = layoutProfile?.panels?.find((item) => String(item.key).toLowerCase() === key);
@@ -142,7 +213,9 @@
       "discord-disabled",
       "audio-over-4",
       "is-fitted",
-      "layout-editing"
+      "layout-editing",
+      "typography-editing",
+      "typography-link-family"
     ];
     document.body.classList.remove(...managedClasses);
     document.body.classList.add("studio-client");
@@ -153,6 +226,8 @@
     if (!snapshot?.discord?.enabled) document.body.classList.add("discord-disabled");
     if (audioRows > 4) document.body.classList.add("audio-over-4");
     if (layoutEditing) document.body.classList.add("layout-editing");
+    if (typographyEditing) document.body.classList.add("typography-editing");
+    if (typographyLinkFamily) document.body.classList.add("typography-link-family");
   }
 
   onMount(() => {
@@ -167,12 +242,14 @@
       if (event.key === "Escape") {
         settingsOpen = false;
         themeOpen = false;
+        endTypographyEditing();
       }
     };
 
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", refreshTypographySelectionPosition, true);
     window.addEventListener("pointermove", onGlobalPointerMove, true);
     window.addEventListener("pointerup", onGlobalPointerRelease, true);
     window.addEventListener("pointercancel", onGlobalPointerRelease, true);
@@ -182,6 +259,7 @@
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", refreshTypographySelectionPosition, true);
       window.removeEventListener("pointermove", onGlobalPointerMove, true);
       window.removeEventListener("pointerup", onGlobalPointerRelease, true);
       window.removeEventListener("pointercancel", onGlobalPointerRelease, true);
@@ -200,6 +278,7 @@
   afterUpdate(() => {
     syncLayoutMetrics();
     syncDockPlacement();
+    refreshTypographySelectionPosition();
     scheduleFit();
   });
 
@@ -320,6 +399,9 @@
       blurPx: Number(currentTheme.visuals?.blurPx ?? 12),
       mediaOpacityPercent: Number(currentTheme.visuals?.mediaOpacityPercent ?? 100)
     };
+    themeTypographyDraft = {};
+    selectedTextRole = textTargets.find((target) => (currentTheme.typography?.styles ?? []).some((style) => style.role === target.id))?.id ?? textTargets[0].id;
+    typographyLinkFamily = false;
     const editorLayout = getActiveLayoutProfile(currentPreferences.layout, currentLayoutEditorProfile(), viewportWidth, viewportHeight);
     layoutColumnsValue = Number(editorLayout?.columns ?? 12);
     layoutRowsValue = Number(editorLayout?.rows ?? 12);
@@ -808,6 +890,156 @@
     });
   }
 
+  function currentSelectedTextStyle() {
+    return (effectiveThemeTypography?.[selectedTextRole] ?? defaultTextStyles[selectedTextRole] ?? defaultTextStyles[textTargets[0].id]);
+  }
+
+  function currentSelectedTextTarget() {
+    return textTargets.find((target) => target.id === selectedTextRole) ?? textTargets[0];
+  }
+
+  function linkedTextTargets() {
+    const selectedTarget = currentSelectedTextTarget();
+    return textTargets.filter((target) => target.family === selectedTarget.family);
+  }
+
+  function editableTextRoleIds() {
+    return typographyLinkFamily ? linkedTextTargets().map((target) => target.id) : [selectedTextRole];
+  }
+
+  function beginTypographyEditing() {
+    themeOpen = false;
+    settingsOpen = false;
+    typographyEditing = true;
+  }
+
+  function endTypographyEditing() {
+    typographyEditing = false;
+    clearSelectedTextTarget();
+  }
+
+  function updateSelectedTextStyle(patch) {
+    const nextDraft = { ...themeTypographyDraft };
+    for (const roleId of editableTextRoleIds()) {
+      nextDraft[roleId] = {
+        ...(nextDraft[roleId] ?? effectiveThemeTypography?.[roleId] ?? defaultTextStyles[roleId]),
+        ...patch
+      };
+    }
+    themeTypographyDraft = nextDraft;
+  }
+
+  function typographyPayloadFromDraft() {
+    const merged = mergeTypography(themeTypography, themeTypographyDraft);
+    return {
+      styles: Object.entries(merged).map(([role, style]) => ({
+        role,
+        fontFamily: style.fontFamily,
+        color: style.color,
+        fontWeight: Number(style.fontWeight),
+        italic: !!style.italic,
+        uppercase: !!style.uppercase,
+        letterSpacingEm: Number(style.letterSpacingEm),
+        fontSizeRem: Number(style.fontSizeRem)
+      }))
+    };
+  }
+
+  async function applyTypography() {
+    await saveSettings({
+      theme: {
+        typography: typographyPayloadFromDraft(),
+        ...currentThemeUpdateContext()
+      }
+    });
+    themeTypographyDraft = {};
+  }
+
+  async function saveTypographyPreset() {
+    const label = typographyPresetName.trim();
+    if (!label) return;
+    const nextId = `type-${Date.now().toString(36)}`;
+    const nextPresets = [
+      {
+        id: nextId,
+        label,
+        typography: typographyPayloadFromDraft()
+      },
+      ...themeTypographyPresets.filter((preset) => preset.label.trim().toLowerCase() !== label.toLowerCase())
+    ];
+    await saveSettings({ theme: { typographyPresets: nextPresets } });
+    typographyPresetName = "";
+  }
+
+  async function applyTypographyPreset(preset) {
+    if (!preset?.typography) return;
+    themeTypographyDraft = {};
+    await saveSettings({
+      theme: {
+        typography: preset.typography,
+        ...currentThemeUpdateContext()
+      }
+    });
+  }
+
+  async function deleteTypographyPreset(presetId) {
+    const nextPresets = themeTypographyPresets.filter((preset) => preset.id !== presetId);
+    await saveSettings({ theme: { typographyPresets: nextPresets } });
+  }
+
+  function setSelectedTextTarget(target) {
+    if (selectedTextElement && selectedTextElement !== target?.element) {
+      selectedTextElement.classList.remove("is-text-editing");
+    }
+    selectedTextElement = target?.element ?? null;
+    if (selectedTextElement) {
+      selectedTextElement.classList.add("is-text-editing");
+    }
+    typographyToolbarPosition = null;
+    refreshTypographySelectionPosition();
+  }
+
+  function clearSelectedTextTarget() {
+    if (selectedTextElement) {
+      selectedTextElement.classList.remove("is-text-editing");
+    }
+    selectedTextElement = null;
+    typographyToolbarPosition = null;
+  }
+
+  function refreshTypographySelectionPosition() {
+    if (!typographyEditing || !selectedTextElement || !typographyToolbarEl || !document.body.contains(selectedTextElement)) {
+      if (typographyToolbarPosition && (!typographyEditing || !selectedTextElement)) {
+        typographyToolbarPosition = null;
+      }
+      return;
+    }
+
+    const rect = selectedTextElement.getBoundingClientRect();
+    if (!rect.width && !rect.height) {
+      return;
+    }
+
+    const toolbarRect = typographyToolbarEl.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const gap = 12;
+    const preferredTop = rect.bottom + gap;
+    const fallbackTop = rect.top - toolbarRect.height - gap;
+    const top = preferredTop + toolbarRect.height <= viewportHeight - 10
+      ? preferredTop
+      : Math.max(10, fallbackTop);
+    const centerX = rect.left + (rect.width / 2);
+    const minLeft = 10 + (toolbarRect.width / 2);
+    const maxLeft = viewportWidth - 10 - (toolbarRect.width / 2);
+    const left = Math.min(maxLeft, Math.max(minLeft, centerX));
+
+    typographyToolbarPosition = {
+      left: Math.round(left),
+      top: Math.round(top)
+    };
+  }
+
   async function linkLocalThemeMedia() {
     if (!localLinkPath.trim()) {
       localLinkState = "error";
@@ -963,6 +1195,55 @@
   }
 
   const themeAssetIsFavorite = (asset) => themeFavoriteAssets.some((item) => String(item.id) === String(asset.id));
+
+  function handleDashboardTextSelection(event) {
+    if (!typographyEditing) return;
+    const target = event.target instanceof Element ? resolveTextRoleTarget(event.target) : null;
+    if (!target?.role) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectedTextRole = target.role;
+    setSelectedTextTarget(target);
+  }
+
+  function resolveTextRoleTarget(element) {
+    const mappings = [
+      [".panel .eyebrow", "panel-eyebrow"],
+      [".section-title", "section-title"],
+      [".panel-temps .temp-label", "temp-label"],
+      [".panel-temps .temp-value", "temp-value"],
+      [".panel-network .metric-value", "network-value"],
+      [".panel-network .metric-label", "network-label"],
+      [".system-list dt", "system-label"],
+      [".system-list dd", "system-value"],
+      [".spotify-title-link", "spotify-title"],
+      [".spotify-meta-link", "spotify-meta-link"],
+      [".spotify-chip", "spotify-chip"],
+      [".spotify-device-name", "spotify-device"],
+      [".panel-spotify .spotify-progress-row .footer-note", "spotify-timing"],
+      [".panel-spotify .spotify-volume-row .metric-value", "spotify-volume"],
+      [".panel-audio .audio-name", "audio-name"],
+      [".panel-audio .audio-detail", "audio-detail"],
+      [".panel-audio .metric-value", "audio-volume"],
+      [".panel-discord .discord-message-copy", "discord-message"],
+      [".panel-discord .discord-subtitle", "discord-subtitle"],
+      [".panel-discord .discord-line-side, .panel-discord .discord-group-note", "discord-meta"],
+      [".panel-discord .discord-name, .panel-discord .discord-identity-row strong", "discord-name"],
+      [".panel-processes .process-meta strong", "process-name"],
+      [".panel-processes .process-meta .footer-note", "process-meta"],
+      [".panel .panel-state, .panel .status-pill", "panel-state"],
+      [".panel .warning-text", "warning-text"]
+    ];
+
+    for (const [selector, role] of mappings) {
+      const match = element.closest(selector);
+      if (match && dashboardEl?.contains(match)) {
+        return { element: match, role };
+      }
+    }
+
+    return null;
+  }
 
   async function clearRecentThemeSearches() {
     await saveSettings({ theme: { clearRecentSearches: true } });
@@ -1221,14 +1502,64 @@
     const base = theme ?? {
       presetId: "neon-grid",
       background: { source: "none", mediaKind: "none" },
-      visuals: { dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 }
+      visuals: { dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 },
+      typography: { styles: [] }
     };
     const variant = findBestThemeVariant(base, profile, width, height);
     return {
       presetId: variant?.presetId ?? base.presetId ?? "neon-grid",
       background: variant?.background ?? base.background ?? { source: "none", mediaKind: "none" },
-      visuals: variant?.visuals ?? base.visuals ?? { dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 }
+      visuals: variant?.visuals ?? base.visuals ?? { dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 },
+      typography: variant?.typography ?? base.typography ?? { styles: [] }
     };
+  }
+
+  function normalizeTypography(typography) {
+    const next = {};
+    for (const target of textTargets) {
+      next[target.id] = { ...defaultTextStyles[target.id] };
+    }
+    for (const style of typography?.styles ?? []) {
+      const role = String(style?.role ?? "").toLowerCase();
+      const targetIds = next[role]
+        ? [role]
+        : textTargets.filter((target) => target.family === role).map((target) => target.id);
+      for (const targetId of targetIds) {
+        next[targetId] = {
+          ...next[targetId],
+          fontFamily: style.fontFamily || next[targetId].fontFamily,
+          color: style.color || next[targetId].color,
+          fontWeight: Number(style.fontWeight ?? next[targetId].fontWeight),
+          italic: !!style.italic,
+          uppercase: !!style.uppercase,
+          letterSpacingEm: Number(style.letterSpacingEm ?? next[targetId].letterSpacingEm),
+          fontSizeRem: Number(style.fontSizeRem ?? next[targetId].fontSizeRem)
+        };
+      }
+    }
+    return next;
+  }
+
+  function mergeTypography(baseTypography, draftTypography) {
+    const normalized = normalizeTypography(baseTypography);
+    for (const [role, style] of Object.entries(draftTypography ?? {})) {
+      if (!normalized[role]) continue;
+      normalized[role] = { ...normalized[role], ...style };
+    }
+    return normalized;
+  }
+
+  function buildTypographyCssText(typography) {
+    const normalized = mergeTypography({ styles: [] }, typography);
+    return Object.entries(normalized).map(([role, style]) =>
+      `--type-${role}-family:${style.fontFamily};` +
+      `--type-${role}-color:${style.color};` +
+      `--type-${role}-weight:${style.fontWeight};` +
+      `--type-${role}-style:${style.italic ? "italic" : "normal"};` +
+      `--type-${role}-transform:${style.uppercase ? "uppercase" : "none"};` +
+      `--type-${role}-spacing:${Number(style.letterSpacingEm).toFixed(3)}em;` +
+      `--type-${role}-size:${Number(style.fontSizeRem).toFixed(3)}rem;`
+    ).join("");
   }
 
   function buildThemeMediaStyle(visuals) {
@@ -1721,7 +2052,7 @@
       <a class="client-mode-link" href="/vanilla/" on:pointerdown={startDockLinksDrag} on:click|capture={handleDockClickCapture}>Vanilla</a>
       <button class="dock-reveal-toggle" hidden={!layoutEditing || !dockControlsHidden} type="button" aria-label="Show layout controls" on:click={toggleDockControlsHidden}>↑</button>
     </div>
-      <button class={`theme-toggle ${themeOpen ? "is-active" : ""}`.trim()} type="button" aria-label="Open theme studio" on:click={() => { if (dockInteractionsLocked()) return; themeOpen = !themeOpen; settingsOpen = false; }}>✦</button>
+      <button class={`theme-toggle ${themeOpen ? "is-active" : ""}`.trim()} type="button" aria-label="Open theme studio" on:click={() => { if (dockInteractionsLocked()) return; if (!themeOpen) endTypographyEditing(); themeOpen = !themeOpen; settingsOpen = false; }}>✦</button>
     <button class="fullscreen-toggle" type="button" aria-label="Toggle fullscreen" on:click={() => { if (dockInteractionsLocked()) return; toggleFullscreen(); }}>⤢</button>
     <button class="settings-toggle" type="button" aria-label="Open live controls" on:click={openSettingsDrawer}>⚙</button>
     <button class={`layout-toggle ${layoutEditing ? "is-active" : ""}`.trim()} type="button" aria-label={layoutEditing ? "Lock layout editing" : "Unlock layout editing"} on:click={toggleLayoutEditing}>{layoutEditing ? "Lock" : "Grid"}</button>
@@ -1993,6 +2324,36 @@
           </label>
         </div>
       </section>
+
+      <section class="settings-section theme-section-card">
+        <div class="settings-row">
+          <div>
+            <div class="section-title">Typography</div>
+            <div class="settings-subtitle">Jump back to the dashboard, tap the text you want, and format it directly in place.</div>
+          </div>
+          <button class={`toggle-pill ${typographyEditing ? "is-active" : ""}`.trim()} type="button" on:click={beginTypographyEditing}>
+            {typographyEditing ? "Editing On Page" : "Pick Text On Page"}
+          </button>
+        </div>
+        <div class="settings-form-grid">
+          <label class="settings-field settings-field-full">
+            <span class="settings-field-label">Save typography preset</span>
+            <input class="settings-input" type="text" placeholder="My cyber text preset" bind:value={typographyPresetName} on:keydown={(event) => event.key === "Enter" && saveTypographyPreset()}>
+          </label>
+        </div>
+        <div class="settings-inline-actions">
+          <button class="ghost-button" type="button" on:click={saveTypographyPreset}>Save preset</button>
+          <button class="ghost-button" type="button" on:click={applyTypography}>Apply current text styles</button>
+        </div>
+        <div class="toggle-grid">
+          {#each themeTypographyPresets as preset}
+            <div class="preset-chip">
+              <button class="toggle-pill" type="button" on:click={() => applyTypographyPreset(preset)}>{preset.label}</button>
+              <button class="ghost-button danger preset-chip-remove" type="button" on:click={() => deleteTypographyPreset(preset.id)}>×</button>
+            </div>
+          {/each}
+        </div>
+      </section>
     </div>
 
     <div class="theme-studio-main">
@@ -2146,8 +2507,83 @@
   </div>
   </form>
 </aside>
+{#if typographyEditing}
+  <div
+    class={`typography-toolbar ${selectedTextElement ? "is-active" : "is-awaiting"}`.trim()}
+    bind:this={typographyToolbarEl}
+    style={typographyToolbarStyle}
+    role="dialog"
+    aria-label="Text formatting tools">
+    <div class="typography-toolbar-header">
+      <div>
+        <div class="eyebrow">Text Format</div>
+        <div class="settings-subtitle">
+          {#if selectedTextElement}
+            Editing {textTargets.find((role) => role.id === selectedTextRole)?.label ?? selectedTextRole}
+          {:else}
+            Tap any text on the dashboard to edit it.
+          {/if}
+        </div>
+      </div>
+      <button class="ghost-button" type="button" on:click={endTypographyEditing}>Done</button>
+    </div>
+    <div class="typography-toolbar-grid">
+      <label class="settings-field">
+        <span class="settings-field-label">Role</span>
+        <select class="settings-input" bind:value={selectedTextRole}>
+          {#each textTargets as role}
+            <option value={role.id}>{role.label}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="settings-field">
+        <span class="settings-field-label">Scope</span>
+        <button class={`toggle-pill ${typographyLinkFamily ? "is-active" : ""}`.trim()} type="button" on:click={() => (typographyLinkFamily = !typographyLinkFamily)}>
+          {typographyLinkFamily ? `Linked group (${linkedTextTargets().length})` : "Selected text only"}
+        </button>
+      </label>
+      <label class="settings-field">
+        <span class="settings-field-label">Font</span>
+        <select class="settings-input" value={selectedTextStyle.fontFamily} on:change={(event) => updateSelectedTextStyle({ fontFamily: event.currentTarget.value })}>
+          {#each fontOptions as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="settings-field">
+        <span class="settings-field-label">Color</span>
+        <input class="settings-input settings-input-color" type="color" value={selectedTextStyle.color} on:input={(event) => updateSelectedTextStyle({ color: event.currentTarget.value })}>
+      </label>
+      <label class="settings-field">
+        <span class="settings-field-label">Weight</span>
+        <input class="settings-range" type="range" min="100" max="900" step="100" value={selectedTextStyle.fontWeight} on:input={(event) => updateSelectedTextStyle({ fontWeight: Number(event.currentTarget.value) })}>
+        <div class="settings-range-value">{selectedTextStyle.fontWeight}</div>
+      </label>
+      <label class="settings-field">
+        <span class="settings-field-label">Size</span>
+        <input class="settings-range" type="range" min="0.6" max="2.4" step="0.05" value={selectedTextStyle.fontSizeRem} on:input={(event) => updateSelectedTextStyle({ fontSizeRem: Number(event.currentTarget.value) })}>
+        <div class="settings-range-value">{selectedTextStyle.fontSizeRem.toFixed(2)}rem</div>
+      </label>
+      <label class="settings-field">
+        <span class="settings-field-label">Spacing</span>
+        <input class="settings-range" type="range" min="-0.05" max="0.4" step="0.01" value={selectedTextStyle.letterSpacingEm} on:input={(event) => updateSelectedTextStyle({ letterSpacingEm: Number(event.currentTarget.value) })}>
+        <div class="settings-range-value">{selectedTextStyle.letterSpacingEm.toFixed(2)}em</div>
+      </label>
+    </div>
+    <div class="typography-toolbar-actions">
+      <button class={`toggle-pill ${selectedTextStyle.fontWeight >= 700 ? "is-active" : ""}`.trim()} type="button" on:click={() => updateSelectedTextStyle({ fontWeight: selectedTextStyle.fontWeight >= 700 ? 400 : 700 })}>Bold</button>
+      <button class={`toggle-pill ${selectedTextStyle.italic ? "is-active" : ""}`.trim()} type="button" on:click={() => updateSelectedTextStyle({ italic: !selectedTextStyle.italic })}>Italic</button>
+      <button class={`toggle-pill ${selectedTextStyle.uppercase ? "is-active" : ""}`.trim()} type="button" on:click={() => updateSelectedTextStyle({ uppercase: !selectedTextStyle.uppercase })}>Uppercase</button>
+      <button class="ghost-button" type="button" on:click={applyTypography}>Apply</button>
+    </div>
+    <div class="typography-toolbar-footer">
+      <input class="settings-input" type="text" placeholder="Preset name" bind:value={typographyPresetName} on:keydown={(event) => event.key === "Enter" && saveTypographyPreset()}>
+      <button class="ghost-button" type="button" on:click={saveTypographyPreset}>Save preset</button>
+    </div>
+  </div>
+{/if}
 <div class="dashboard-viewport" bind:this={viewportEl}>
-  <main class="dashboard" bind:this={dashboardEl} style={dashboardCssText}>
+  <main class="dashboard" bind:this={dashboardEl} style={dashboardCssText} on:click|capture={handleDashboardTextSelection}>
     <section role="group" aria-label="Hardware Temperatures panel" data-panel="temps" class={`panel panel-temps ${!panelView.temps?.visible ? "is-hidden" : ""} ${panelView.temps?.locked ? "is-layout-locked" : ""} ${panelView.temps?.compact ? "is-layout-compact" : ""} ${panelView.temps?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.temps?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "temps")}>
       <header class="panel-header"><span class="eyebrow">Hardware Temperatures</span></header>
       {#if layoutEditing}

@@ -130,6 +130,403 @@ body.studio-client {
   text-decoration: none;
 }
 
+.dashboard .panel .eyebrow {
+  font-family: var(--type-panel-eyebrow-family);
+  color: var(--type-panel-eyebrow-color);
+  font-weight: var(--type-panel-eyebrow-weight);
+  font-style: var(--type-panel-eyebrow-style);
+  text-transform: var(--type-panel-eyebrow-transform);
+  letter-spacing: var(--type-panel-eyebrow-spacing);
+  font-size: var(--type-panel-eyebrow-size);
+}
+
+.dashboard .section-title {
+  font-family: var(--type-section-title-family);
+  color: var(--type-section-title-color);
+  font-weight: var(--type-section-title-weight);
+  font-style: var(--type-section-title-style);
+  text-transform: var(--type-section-title-transform);
+  letter-spacing: var(--type-section-title-spacing);
+  font-size: var(--type-section-title-size);
+}
+
+.dashboard .panel-temps .temp-value {
+  font-family: var(--type-temp-value-family);
+  color: var(--type-temp-value-color);
+  font-weight: var(--type-temp-value-weight);
+  font-style: var(--type-temp-value-style);
+  text-transform: var(--type-temp-value-transform);
+  letter-spacing: var(--type-temp-value-spacing);
+  font-size: var(--type-temp-value-size);
+}
+
+.dashboard .panel-temps .temp-label {
+  font-family: var(--type-temp-label-family);
+  color: var(--type-temp-label-color);
+  font-weight: var(--type-temp-label-weight);
+  font-style: var(--type-temp-label-style);
+  text-transform: var(--type-temp-label-transform);
+  letter-spacing: var(--type-temp-label-spacing);
+  font-size: var(--type-temp-label-size);
+}
+
+.dashboard .panel-network .metric-value {
+  font-family: var(--type-network-value-family);
+  color: var(--type-network-value-color);
+  font-weight: var(--type-network-value-weight);
+  font-style: var(--type-network-value-style);
+  text-transform: var(--type-network-value-transform);
+  letter-spacing: var(--type-network-value-spacing);
+  font-size: var(--type-network-value-size);
+}
+
+.dashboard .panel-network .metric-label {
+  font-family: var(--type-network-label-family);
+  color: var(--type-network-label-color);
+  font-weight: var(--type-network-label-weight);
+  font-style: var(--type-network-label-style);
+  text-transform: var(--type-network-label-transform);
+  letter-spacing: var(--type-network-label-spacing);
+  font-size: var(--type-network-label-size);
+}
+
+.dashboard .panel-audio .audio-name {
+  font-family: var(--type-audio-name-family);
+  color: var(--type-audio-name-color);
+  font-weight: var(--type-audio-name-weight);
+  font-style: var(--type-audio-name-style);
+  text-transform: var(--type-audio-name-transform);
+  letter-spacing: var(--type-audio-name-spacing);
+  font-size: var(--type-audio-name-size);
+}
+
+.dashboard .panel-audio .audio-detail {
+  font-family: var(--type-audio-detail-family);
+  color: var(--type-audio-detail-color);
+  font-weight: var(--type-audio-detail-weight);
+  font-style: var(--type-audio-detail-style);
+  text-transform: var(--type-audio-detail-transform);
+  letter-spacing: var(--type-audio-detail-spacing);
+  font-size: var(--type-audio-detail-size);
+}
+
+.dashboard .panel-audio .metric-value {
+  font-family: var(--type-audio-volume-family);
+  color: var(--type-audio-volume-color);
+  font-weight: var(--type-audio-volume-weight);
+  font-style: var(--type-audio-volume-style);
+  text-transform: var(--type-audio-volume-transform);
+  letter-spacing: var(--type-audio-volume-spacing);
+  font-size: var(--type-audio-volume-size);
+}
+
+.dashboard .panel-discord .discord-name,
+.dashboard .panel-discord .discord-identity-row strong {
+  font-family: var(--type-discord-name-family);
+  color: var(--type-discord-name-color);
+  font-weight: var(--type-discord-name-weight);
+  font-style: var(--type-discord-name-style);
+  text-transform: var(--type-discord-name-transform);
+  letter-spacing: var(--type-discord-name-spacing);
+  font-size: var(--type-discord-name-size);
+}
+
+.dashboard .panel-discord .discord-subtitle {
+  font-family: var(--type-discord-subtitle-family);
+  color: var(--type-discord-subtitle-color);
+  font-weight: var(--type-discord-subtitle-weight);
+  font-style: var(--type-discord-subtitle-style);
+  text-transform: var(--type-discord-subtitle-transform);
+  letter-spacing: var(--type-discord-subtitle-spacing);
+  font-size: var(--type-discord-subtitle-size);
+}
+
+.dashboard .panel-discord .discord-line-side,
+.dashboard .panel-discord .discord-group-note {
+  font-family: var(--type-discord-meta-family);
+  color: var(--type-discord-meta-color);
+  font-weight: var(--type-discord-meta-weight);
+  font-style: var(--type-discord-meta-style);
+  text-transform: var(--type-discord-meta-transform);
+  letter-spacing: var(--type-discord-meta-spacing);
+  font-size: var(--type-discord-meta-size);
+}
+
+.dashboard .panel-discord .discord-message-copy {
+  font-family: var(--type-discord-message-family);
+  color: var(--type-discord-message-color);
+  font-weight: var(--type-discord-message-weight);
+  font-style: var(--type-discord-message-style);
+  text-transform: var(--type-discord-message-transform);
+  letter-spacing: var(--type-discord-message-spacing);
+  font-size: var(--type-discord-message-size);
+}
+
+.dashboard .panel-processes .process-meta strong {
+  font-family: var(--type-process-name-family);
+  color: var(--type-process-name-color);
+  font-weight: var(--type-process-name-weight);
+  font-style: var(--type-process-name-style);
+  text-transform: var(--type-process-name-transform);
+  letter-spacing: var(--type-process-name-spacing);
+  font-size: var(--type-process-name-size);
+}
+
+.dashboard .panel-processes .process-meta .footer-note {
+  font-family: var(--type-process-meta-family);
+  color: var(--type-process-meta-color);
+  font-weight: var(--type-process-meta-weight);
+  font-style: var(--type-process-meta-style);
+  text-transform: var(--type-process-meta-transform);
+  letter-spacing: var(--type-process-meta-spacing);
+  font-size: var(--type-process-meta-size);
+}
+
+.dashboard .system-list dt {
+  font-family: var(--type-system-label-family);
+  color: var(--type-system-label-color);
+  font-weight: var(--type-system-label-weight);
+  font-style: var(--type-system-label-style);
+  text-transform: var(--type-system-label-transform);
+  letter-spacing: var(--type-system-label-spacing);
+  font-size: var(--type-system-label-size);
+}
+
+.dashboard .system-list dd {
+  font-family: var(--type-system-value-family);
+  color: var(--type-system-value-color);
+  font-weight: var(--type-system-value-weight);
+  font-style: var(--type-system-value-style);
+  text-transform: var(--type-system-value-transform);
+  letter-spacing: var(--type-system-value-spacing);
+  font-size: var(--type-system-value-size);
+}
+
+.dashboard .spotify-title-link {
+  font-family: var(--type-spotify-title-family);
+  color: var(--type-spotify-title-color);
+  font-weight: var(--type-spotify-title-weight);
+  font-style: var(--type-spotify-title-style);
+  text-transform: var(--type-spotify-title-transform);
+  letter-spacing: var(--type-spotify-title-spacing);
+  font-size: var(--type-spotify-title-size);
+}
+
+.dashboard .spotify-meta-link {
+  font-family: var(--type-spotify-meta-link-family);
+  color: var(--type-spotify-meta-link-color);
+  font-weight: var(--type-spotify-meta-link-weight);
+  font-style: var(--type-spotify-meta-link-style);
+  text-transform: var(--type-spotify-meta-link-transform);
+  letter-spacing: var(--type-spotify-meta-link-spacing);
+  font-size: var(--type-spotify-meta-link-size);
+}
+
+.dashboard .spotify-chip {
+  font-family: var(--type-spotify-chip-family);
+  color: var(--type-spotify-chip-color);
+  font-weight: var(--type-spotify-chip-weight);
+  font-style: var(--type-spotify-chip-style);
+  text-transform: var(--type-spotify-chip-transform);
+  letter-spacing: var(--type-spotify-chip-spacing);
+  font-size: var(--type-spotify-chip-size);
+}
+
+.dashboard .spotify-device-name {
+  font-family: var(--type-spotify-device-family);
+  color: var(--type-spotify-device-color);
+  font-weight: var(--type-spotify-device-weight);
+  font-style: var(--type-spotify-device-style);
+  text-transform: var(--type-spotify-device-transform);
+  letter-spacing: var(--type-spotify-device-spacing);
+  font-size: var(--type-spotify-device-size);
+}
+
+.dashboard .panel-spotify .spotify-progress-row .footer-note {
+  font-family: var(--type-spotify-timing-family);
+  color: var(--type-spotify-timing-color);
+  font-weight: var(--type-spotify-timing-weight);
+  font-style: var(--type-spotify-timing-style);
+  text-transform: var(--type-spotify-timing-transform);
+  letter-spacing: var(--type-spotify-timing-spacing);
+  font-size: var(--type-spotify-timing-size);
+}
+
+.dashboard .panel-spotify .spotify-volume-row .metric-value {
+  font-family: var(--type-spotify-volume-family);
+  color: var(--type-spotify-volume-color);
+  font-weight: var(--type-spotify-volume-weight);
+  font-style: var(--type-spotify-volume-style);
+  text-transform: var(--type-spotify-volume-transform);
+  letter-spacing: var(--type-spotify-volume-spacing);
+  font-size: var(--type-spotify-volume-size);
+}
+
+.dashboard .panel .panel-state,
+.dashboard .panel .status-pill {
+  font-family: var(--type-panel-state-family);
+  color: var(--type-panel-state-color);
+  font-weight: var(--type-panel-state-weight);
+  font-style: var(--type-panel-state-style);
+  text-transform: var(--type-panel-state-transform);
+  letter-spacing: var(--type-panel-state-spacing);
+  font-size: var(--type-panel-state-size);
+}
+
+.dashboard .panel .warning-text {
+  font-family: var(--type-warning-text-family);
+  color: var(--type-warning-text-color);
+  font-weight: var(--type-warning-text-weight);
+  font-style: var(--type-warning-text-style);
+  text-transform: var(--type-warning-text-transform);
+  letter-spacing: var(--type-warning-text-spacing);
+  font-size: var(--type-warning-text-size);
+}
+
+body.typography-editing .dashboard .panel .eyebrow,
+body.typography-editing .dashboard .section-title,
+body.typography-editing .dashboard .temp-label,
+body.typography-editing .dashboard .temp-value,
+body.typography-editing .dashboard .panel-network .metric-label,
+body.typography-editing .dashboard .panel-network .metric-value,
+body.typography-editing .dashboard .panel-audio .audio-name,
+body.typography-editing .dashboard .panel-audio .audio-detail,
+body.typography-editing .dashboard .panel-audio .metric-value,
+body.typography-editing .dashboard .panel-discord .discord-name,
+body.typography-editing .dashboard .panel-discord .discord-subtitle,
+body.typography-editing .dashboard .panel-discord .discord-line-side,
+body.typography-editing .dashboard .panel-discord .discord-group-note,
+body.typography-editing .dashboard .panel-discord .discord-message-copy,
+body.typography-editing .dashboard .panel-processes .process-meta strong,
+body.typography-editing .dashboard .panel-processes .process-meta .footer-note,
+body.typography-editing .dashboard .panel-spotify .spotify-title-link,
+body.typography-editing .dashboard .panel-spotify .spotify-meta-link,
+body.typography-editing .dashboard .panel-spotify .spotify-chip,
+body.typography-editing .dashboard .panel-spotify .spotify-device-name,
+body.typography-editing .dashboard .panel-spotify .spotify-progress-row .footer-note,
+body.typography-editing .dashboard .panel-spotify .spotify-volume-row .metric-value,
+body.typography-editing .dashboard .system-list dt,
+body.typography-editing .dashboard .system-list dd,
+body.typography-editing .dashboard .panel .panel-state,
+body.typography-editing .dashboard .warning-text,
+body.typography-editing .dashboard .panel .status-pill {
+  transition: box-shadow 120ms ease, outline-color 120ms ease;
+}
+
+body.typography-editing .dashboard .is-text-editing,
+body.typography-editing .dashboard .panel .eyebrow:hover,
+body.typography-editing .dashboard .section-title:hover,
+body.typography-editing .dashboard .temp-label:hover,
+body.typography-editing .dashboard .temp-value:hover,
+body.typography-editing .dashboard .panel-network .metric-label:hover,
+body.typography-editing .dashboard .panel-network .metric-value:hover,
+body.typography-editing .dashboard .panel-audio .audio-name:hover,
+body.typography-editing .dashboard .panel-audio .audio-detail:hover,
+body.typography-editing .dashboard .panel-audio .metric-value:hover,
+body.typography-editing .dashboard .panel-discord .discord-name:hover,
+body.typography-editing .dashboard .panel-discord .discord-subtitle:hover,
+body.typography-editing .dashboard .panel-discord .discord-line-side:hover,
+body.typography-editing .dashboard .panel-discord .discord-group-note:hover,
+body.typography-editing .dashboard .panel-discord .discord-message-copy:hover,
+body.typography-editing .dashboard .panel-processes .process-meta strong:hover,
+body.typography-editing .dashboard .panel-processes .process-meta .footer-note:hover,
+body.typography-editing .dashboard .panel-spotify .spotify-title-link:hover,
+body.typography-editing .dashboard .panel-spotify .spotify-meta-link:hover,
+body.typography-editing .dashboard .panel-spotify .spotify-chip:hover,
+body.typography-editing .dashboard .panel-spotify .spotify-device-name:hover,
+body.typography-editing .dashboard .panel-spotify .spotify-progress-row .footer-note:hover,
+body.typography-editing .dashboard .panel-spotify .spotify-volume-row .metric-value:hover,
+body.typography-editing .dashboard .system-list dt:hover,
+body.typography-editing .dashboard .system-list dd:hover,
+body.typography-editing .dashboard .panel .panel-state:hover,
+body.typography-editing .dashboard .warning-text:hover,
+body.typography-editing .dashboard .panel .status-pill:hover {
+  outline: 1px dashed rgba(31, 226, 255, 0.35);
+  outline-offset: 2px;
+}
+
+body.typography-editing .dashboard {
+  cursor: crosshair;
+}
+
+body.typography-editing .dashboard .is-text-editing {
+  outline: 1px solid rgba(31, 226, 255, 0.72);
+  box-shadow: 0 0 0 3px rgba(31, 226, 255, 0.14);
+  border-radius: 8px;
+}
+
+.typography-toolbar {
+  position: fixed;
+  z-index: 32;
+  width: min(720px, calc(100vw - 20px));
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(83, 221, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(10, 13, 26, 0.7), rgba(8, 10, 22, 0.82)),
+    radial-gradient(circle at top left, rgba(31, 226, 255, 0.08), transparent 42%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42), 0 0 26px rgba(24, 196, 255, 0.14);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  transform: translateX(-50%);
+}
+
+.typography-toolbar.is-awaiting {
+  left: 50%;
+  top: auto;
+  bottom: 18px;
+}
+
+.typography-toolbar-header,
+.typography-toolbar-actions,
+.typography-toolbar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.typography-toolbar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.typography-toolbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.typography-toolbar-footer .settings-input {
+  flex: 1 1 220px;
+}
+
+@media (max-width: 1100px) {
+  .typography-toolbar-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .typography-toolbar {
+    width: min(calc(100vw - 16px), 560px);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .typography-toolbar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .typography-toolbar-header,
+  .typography-toolbar-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .client-mode-link {
   display: inline-flex;
   align-items: center;
@@ -936,6 +1333,26 @@ body.settings-open .settings-drawer {
   padding: 10px 12px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+.settings-input-color {
+  min-height: 42px;
+  padding: 6px;
+}
+
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preset-chip-remove {
+  min-width: 36px;
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .settings-input::placeholder {

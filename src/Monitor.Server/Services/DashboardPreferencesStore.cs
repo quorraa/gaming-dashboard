@@ -145,13 +145,19 @@ public sealed class DashboardPreferencesStore
                 hasViewportThemeOverride || themeUpdate?.Visuals is null
                     ? currentTheme.Visuals
                     : NormalizeThemeVisuals(themeUpdate.Visuals, currentTheme.Visuals),
+                hasViewportThemeOverride || themeUpdate?.Typography is null
+                    ? currentTheme.Typography
+                    : NormalizeThemeTypographySnapshot(themeUpdate.Typography),
                 themeUpdate is null
                     ? currentTheme.Variants
                     : MergeThemeVariants(currentTheme, themeUpdate),
                 MergeRecentSearches(currentTheme.RecentSearches, themeUpdate?.RecentSearch, themeUpdate?.ClearRecentSearches ?? false),
                 themeUpdate?.FavoriteAssets is null
                     ? currentTheme.FavoriteAssets
-                    : NormalizePexelsAssets(themeUpdate.FavoriteAssets));
+                    : NormalizePexelsAssets(themeUpdate.FavoriteAssets),
+                themeUpdate?.TypographyPresets is null
+                    ? currentTheme.TypographyPresets
+                    : NormalizeTypographyPresets(themeUpdate.TypographyPresets));
 
             _current = SanitizeMissingLocalMediaReferences(new DashboardPreferencesSnapshot(visiblePanels, audio, discord, spotify, layout, theme));
             PersistUnsafe();
@@ -281,6 +287,8 @@ public sealed class DashboardPreferencesStore
                 BuildSecretHint(settings.Theme.PexelsApiKey),
                 ThemeBackgroundSnapshot.Empty,
                 ThemeVisualsSnapshot.Default,
+                ThemeTypographySnapshot.Default,
+                [],
                 [],
                 [],
                 []));
@@ -435,9 +443,11 @@ public sealed class DashboardPreferencesStore
             BuildSecretHint(candidate.PexelsApiKey?.Trim() ?? fallback.PexelsApiKey),
             NormalizeThemeBackgroundSnapshot(candidate.Background),
             NormalizeThemeVisualsSnapshot(candidate.Visuals),
+            NormalizeThemeTypographySnapshot(candidate.Typography),
             NormalizeThemeVariants(candidate.Variants, fallback),
             NormalizeRecentSearches(candidate.RecentSearches),
-            NormalizePexelsAssets(candidate.FavoriteAssets));
+            NormalizePexelsAssets(candidate.FavoriteAssets),
+            NormalizeTypographyPresets(candidate.TypographyPresets));
     }
 
     private static DashboardLayoutPreferencesSnapshot MergeLayoutPreferences(
@@ -787,13 +797,67 @@ public sealed class DashboardPreferencesStore
             Math.Clamp(candidate.MediaOpacityPercent, 15, 100));
     }
 
+    private static ThemeTypographySnapshot NormalizeThemeTypographySnapshot(ThemeTypographySnapshot? candidate)
+    {
+        if (candidate is null)
+        {
+            return ThemeTypographySnapshot.Default;
+        }
+
+        return new ThemeTypographySnapshot(
+            NormalizeThemeTextStyles(candidate.Styles));
+    }
+
+    private static ThemeTextStyleSnapshot[] NormalizeThemeTextStyles(IEnumerable<ThemeTextStyleSnapshot>? candidate)
+    {
+        if (candidate is null)
+        {
+            return [];
+        }
+
+        return candidate
+            .Where(item => !string.IsNullOrWhiteSpace(item.Role))
+            .Select(item => new ThemeTextStyleSnapshot(
+                item.Role.Trim().ToLowerInvariant(),
+                item.FontFamily?.Trim() ?? string.Empty,
+                item.Color?.Trim() ?? string.Empty,
+                Math.Clamp(item.FontWeight, 100, 900),
+                item.Italic,
+                item.Uppercase,
+                Math.Clamp(item.LetterSpacingEm, -0.1d, 0.6d),
+                Math.Clamp(item.FontSizeRem, 0.5d, 4d)))
+            .GroupBy(item => item.Role, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .OrderBy(item => item.Role, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static ThemeTypographyPresetSnapshot[] NormalizeTypographyPresets(IEnumerable<ThemeTypographyPresetSnapshot>? candidate)
+    {
+        if (candidate is null)
+        {
+            return [];
+        }
+
+        return candidate
+            .Where(item => !string.IsNullOrWhiteSpace(item.Id) && !string.IsNullOrWhiteSpace(item.Label))
+            .Select(item => new ThemeTypographyPresetSnapshot(
+                item.Id.Trim(),
+                item.Label.Trim(),
+                NormalizeThemeTypographySnapshot(item.Typography)))
+            .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .Take(32)
+            .ToArray();
+    }
+
     private static bool HasThemeViewportOverride(ThemePreferencesUpdate? update)
     {
         return update is not null
             && !string.IsNullOrWhiteSpace(update.ViewportKey)
             && update.ViewportWidth.GetValueOrDefault() > 0
             && update.ViewportHeight.GetValueOrDefault() > 0
-            && (update.PresetId is not null || update.Background is not null || update.Visuals is not null);
+            && (update.PresetId is not null || update.Background is not null || update.Visuals is not null || update.Typography is not null);
     }
 
     private static ThemeVariantSnapshot[] MergeThemeVariants(
@@ -823,7 +887,8 @@ public sealed class DashboardPreferencesStore
                 update.ViewportHeight!.Value,
                 current.PresetId,
                 current.Background,
-                current.Visuals);
+                current.Visuals,
+                current.Typography);
 
         variants[viewportKey] = NormalizeThemeVariant(new ThemeVariantSnapshot(
             viewportKey,
@@ -836,7 +901,10 @@ public sealed class DashboardPreferencesStore
                 : NormalizeThemeBackground(currentVariant.Background, update.Background),
             update.Visuals is null
                 ? currentVariant.Visuals
-                : NormalizeThemeVisuals(update.Visuals, currentVariant.Visuals)),
+                : NormalizeThemeVisuals(update.Visuals, currentVariant.Visuals),
+            update.Typography is null
+                ? currentVariant.Typography
+                : NormalizeThemeTypographySnapshot(update.Typography)),
             current);
 
         return variants.Values
@@ -877,7 +945,8 @@ public sealed class DashboardPreferencesStore
             Math.Max(1, candidate.ViewportHeight),
             NormalizeThemePreset(candidate.PresetId, fallback.PresetId),
             NormalizeThemeBackgroundSnapshot(candidate.Background),
-            NormalizeThemeVisualsSnapshot(candidate.Visuals));
+            NormalizeThemeVisualsSnapshot(candidate.Visuals),
+            NormalizeThemeTypographySnapshot(candidate.Typography));
     }
 
     private static string[] NormalizeRecentSearches(IEnumerable<string>? candidate)

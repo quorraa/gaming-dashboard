@@ -352,9 +352,11 @@ public sealed record ThemePreferencesSnapshot(
     string PexelsApiKeyHint,
     ThemeBackgroundSnapshot Background,
     ThemeVisualsSnapshot Visuals,
+    ThemeTypographySnapshot Typography,
     IReadOnlyList<ThemeVariantSnapshot> Variants,
     IReadOnlyList<string> RecentSearches,
-    IReadOnlyList<PexelsAssetSnapshot> FavoriteAssets)
+    IReadOnlyList<PexelsAssetSnapshot> FavoriteAssets,
+    IReadOnlyList<ThemeTypographyPresetSnapshot> TypographyPresets)
 {
     public static ThemePreferencesSnapshot Default { get; } = new(
         "neon-grid",
@@ -362,6 +364,8 @@ public sealed record ThemePreferencesSnapshot(
         string.Empty,
         ThemeBackgroundSnapshot.Empty,
         ThemeVisualsSnapshot.Default,
+        ThemeTypographySnapshot.Default,
+        [],
         [],
         [],
         []);
@@ -396,6 +400,27 @@ public sealed record ThemeVisualsSnapshot(
     public static ThemeVisualsSnapshot Default { get; } = new(42, 12, 100);
 }
 
+public sealed record ThemeTypographySnapshot(
+    IReadOnlyList<ThemeTextStyleSnapshot> Styles)
+{
+    public static ThemeTypographySnapshot Default { get; } = new([]);
+}
+
+public sealed record ThemeTextStyleSnapshot(
+    string Role,
+    string FontFamily,
+    string Color,
+    int FontWeight,
+    bool Italic,
+    bool Uppercase,
+    double LetterSpacingEm,
+    double FontSizeRem);
+
+public sealed record ThemeTypographyPresetSnapshot(
+    string Id,
+    string Label,
+    ThemeTypographySnapshot Typography);
+
 public sealed record ThemeVariantSnapshot(
     string ViewportKey,
     string ProfileKey,
@@ -403,20 +428,23 @@ public sealed record ThemeVariantSnapshot(
     int ViewportHeight,
     string PresetId,
     ThemeBackgroundSnapshot Background,
-    ThemeVisualsSnapshot Visuals);
+    ThemeVisualsSnapshot Visuals,
+    ThemeTypographySnapshot Typography);
 
 public sealed record ThemePreferencesUpdate(
     string? PresetId,
     string? PexelsApiKey,
     ThemeBackgroundUpdate? Background,
     ThemeVisualsUpdate? Visuals,
+    ThemeTypographySnapshot? Typography,
     string? ViewportKey,
     string? ProfileKey,
     int? ViewportWidth,
     int? ViewportHeight,
     string? RecentSearch,
     bool? ClearRecentSearches,
-    IReadOnlyList<PexelsAssetSnapshot>? FavoriteAssets);
+    IReadOnlyList<PexelsAssetSnapshot>? FavoriteAssets,
+    IReadOnlyList<ThemeTypographyPresetSnapshot>? TypographyPresets);
 
 public sealed record ThemeBackgroundUpdate(
     string? Source,
