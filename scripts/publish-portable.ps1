@@ -15,8 +15,33 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
 $projectPath = Join-Path $repoRoot "src\\Monitor.Server\\Monitor.Server.csproj"
 $publishRoot = Join-Path $OutputRoot "publish"
 $publishDir = Join-Path $publishRoot "$Runtime-$Configuration"
-$appDir = Join-Path $publishDir "app"
+$stagingDir = Join-Path $publishRoot "$Runtime-$Configuration-staging-$PID"
+$appDir = Join-Path $stagingDir "app"
 $zipPath = Join-Path $OutputRoot "gaming-dashboard-$Runtime-$Configuration.zip"
+
+function Stop-PackagedMonitorServer {
+    param(
+        [string]$PublishRootPath
+    )
+
+    $normalizedPublishRoot = [System.IO.Path]::GetFullPath($PublishRootPath).TrimEnd('\')
+    $packagedProcesses = Get-CimInstance Win32_Process |
+        Where-Object {
+            $_.Name -eq "Monitor.Server.exe" -and
+            -not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
+            ([System.IO.Path]::GetFullPath($_.ExecutablePath).StartsWith($normalizedPublishRoot, [System.StringComparison]::OrdinalIgnoreCase))
+        }
+
+    if (-not $packagedProcesses) {
+        return
+    }
+
+    Write-Host "Stopping packaged Monitor.Server instances under $normalizedPublishRoot"
+    $packagedProcesses | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+    }
+    Start-Sleep -Seconds 1
+}
 
 Write-Host "Building Studio frontend"
 Push-Location $repoRoot
@@ -30,8 +55,8 @@ finally {
     Pop-Location
 }
 
-if (Test-Path $publishDir) {
-    Remove-Item $publishDir -Recurse -Force
+if (Test-Path $stagingDir) {
+    Remove-Item $stagingDir -Recurse -Force
 }
 
 New-Item -ItemType Directory -Path $appDir -Force | Out-Null
@@ -74,7 +99,7 @@ start "" "%APP_DIR%\Monitor.Server.exe"
 popd
 "@
 
-Set-Content -Path (Join-Path $publishDir "Launch Gaming Dashboard.cmd") -Value $launcherCmd -Encoding ASCII
+Set-Content -Path (Join-Path $stagingDir "Launch Gaming Dashboard.cmd") -Value $launcherCmd -Encoding ASCII
 
 $launcherPs1 = @"
 $ErrorActionPreference = 'Stop'
@@ -86,7 +111,7 @@ if (-not (Test-Path $exePath)) {
 Start-Process -FilePath $exePath -WorkingDirectory $appDir
 "@
 
-Set-Content -Path (Join-Path $publishDir "Launch Gaming Dashboard.ps1") -Value $launcherPs1 -Encoding ASCII
+Set-Content -Path (Join-Path $stagingDir "Launch Gaming Dashboard.ps1") -Value $launcherPs1 -Encoding ASCII
 
 $portableReadme = @"
 Gaming Dashboard portable package
@@ -115,7 +140,30 @@ Notes:
   - Studio Next remains available at /studio-next for direct testing/debugging.
 "@
 
-Set-Content -Path (Join-Path $publishDir "PORTABLE.txt") -Value $portableReadme -Encoding ASCII
+Set-Content -Path (Join-Path $stagingDir "PORTABLE.txt") -Value $portableReadme -Encoding ASCII
+
+Stop-PackagedMonitorServer -PublishRootPath $publishRoot
+
+Get-ChildItem -Path $publishRoot -Directory -Filter "$Runtime-$Configuration-staging-*" -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -ne $stagingDir } |
+    ForEach-Object {
+        Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+if (Test-Path $publishDir) {
+    Get-ChildItem -Path $publishDir -Force | ForEach-Object {
+        Remove-Item $_.FullName -Recurse -Force
+    }
+}
+else {
+    New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+}
+
+Get-ChildItem -Path $stagingDir -Force | ForEach-Object {
+    Move-Item -Path $_.FullName -Destination $publishDir -Force
+}
+
+Remove-Item $stagingDir -Recurse -Force
 
 if (-not $NoZip) {
     if (Test-Path $zipPath) {

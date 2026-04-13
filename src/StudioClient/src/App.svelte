@@ -1938,190 +1938,212 @@
   </div>
 
   <div class="theme-viewport-pill">Editing current viewport preset: {themeViewportLabel}</div>
+  <div class="theme-studio">
+    <div class="theme-studio-sidebar">
+      <section class="settings-section theme-section-card">
+        <div class="settings-row">
+          <div class="section-title">Background</div>
+          <button class="ghost-button" type="button" on:click={clearThemeBackground}>Clear</button>
+        </div>
+        <div class="theme-background-summary">
+          <div>
+            <strong>{effectiveBackground?.label || "No background selected"}</strong>
+            <div class="footer-note">{effectiveBackground?.source === "none" ? "Fallback preset only" : `${effectiveBackground?.mediaKind ?? "media"} · ${effectiveBackground?.source ?? "custom"}`}</div>
+          </div>
+          <div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(effectiveBackground ?? {}))}`}>{cacheLabelForUrls(assetCacheUrls(effectiveBackground ?? {}))}</div>
+        </div>
+        <div class="theme-active-preview">
+          {#if effectiveBackground?.renderUrl}
+            {#if effectiveBackground.mediaKind === "video"}
+              <video class="theme-active-preview-media" src={effectiveBackground.renderUrl} muted loop autoplay playsinline preload="metadata"></video>
+            {:else}
+              <img class="theme-active-preview-media" src={effectiveBackground.renderUrl} alt={effectiveBackground.label || "Background preview"}>
+            {/if}
+          {:else}
+            <div class="theme-active-preview-empty">Preset only</div>
+          {/if}
+        </div>
+      </section>
 
-  <section class="settings-section">
-    <div class="settings-row">
-      <div class="section-title">Background</div>
-      <button class="ghost-button" type="button" on:click={clearThemeBackground}>Clear</button>
+      <section class="settings-section theme-section-card">
+        <div class="settings-row">
+          <div class="section-title">Look</div>
+          <button class="ghost-button" type="button" on:click={saveThemeVisuals}>Apply look</button>
+        </div>
+        <div class="settings-form-grid">
+          <label class="settings-field">
+            <span class="settings-field-label">Dim</span>
+            <div class="settings-range-row"><input id="theme-dim-percent" name="theme-dim-percent" class="settings-range" type="range" min="0" max="90" step="1" bind:value={themeForm.dimPercent}><div class="settings-range-value">{themeForm.dimPercent}%</div></div>
+          </label>
+          <label class="settings-field">
+            <span class="settings-field-label">Blur</span>
+            <div class="settings-range-row"><input id="theme-blur-px" name="theme-blur-px" class="settings-range" type="range" min="0" max="40" step="1" bind:value={themeForm.blurPx}><div class="settings-range-value">{themeForm.blurPx}px</div></div>
+          </label>
+          <label class="settings-field settings-field-full">
+            <span class="settings-field-label">Media opacity</span>
+            <div class="settings-range-row"><input id="theme-media-opacity" name="theme-media-opacity" class="settings-range" type="range" min="15" max="100" step="1" bind:value={themeForm.mediaOpacityPercent}><div class="settings-range-value">{themeForm.mediaOpacityPercent}%</div></div>
+          </label>
+          <label class="settings-field settings-field-full">
+            <span class="settings-field-label">Studio palette</span>
+            <select id="theme-preset" name="theme-preset" class="settings-input" bind:value={themeForm.presetId} on:change={(event) => setPreset(event.currentTarget.value)}>
+              {#each presets as preset}
+                <option value={preset.id}>{preset.label}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+      </section>
     </div>
-    <div class="theme-background-summary">
-      <div>
-        <strong>{effectiveBackground?.label || "No background selected"}</strong>
-        <div class="footer-note">{effectiveBackground?.source === "none" ? "Fallback preset only" : `${effectiveBackground?.mediaKind ?? "media"} · ${effectiveBackground?.source ?? "custom"}`}</div>
-      </div>
-      <div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(effectiveBackground ?? {}))}`}>{cacheLabelForUrls(assetCacheUrls(effectiveBackground ?? {}))}</div>
-    </div>
-    <div class="settings-row">
-      <div class="section-title">Glass Controls</div>
-      <button class="ghost-button" type="button" on:click={saveThemeVisuals}>Apply look</button>
-    </div>
-    <div class="settings-form-grid">
-      <label class="settings-field">
-        <span class="settings-field-label">Dim</span>
-        <div class="settings-range-row"><input id="theme-dim-percent" name="theme-dim-percent" class="settings-range" type="range" min="0" max="90" step="1" bind:value={themeForm.dimPercent}><div class="settings-range-value">{themeForm.dimPercent}%</div></div>
-      </label>
-      <label class="settings-field">
-        <span class="settings-field-label">Blur</span>
-        <div class="settings-range-row"><input id="theme-blur-px" name="theme-blur-px" class="settings-range" type="range" min="0" max="40" step="1" bind:value={themeForm.blurPx}><div class="settings-range-value">{themeForm.blurPx}px</div></div>
-      </label>
-      <label class="settings-field settings-field-full">
-        <span class="settings-field-label">Media opacity</span>
-        <div class="settings-range-row"><input id="theme-media-opacity" name="theme-media-opacity" class="settings-range" type="range" min="15" max="100" step="1" bind:value={themeForm.mediaOpacityPercent}><div class="settings-range-value">{themeForm.mediaOpacityPercent}%</div></div>
-      </label>
-    </div>
-  </section>
 
-  <section class="settings-section">
-    <div class="section-title">Preset</div>
-    <label class="settings-field">
-      <span class="settings-field-label">Studio palette</span>
-      <select id="theme-preset" name="theme-preset" class="settings-input" bind:value={themeForm.presetId} on:change={(event) => setPreset(event.currentTarget.value)}>
-        {#each presets as preset}
-          <option value={preset.id}>{preset.label}</option>
-        {/each}
-      </select>
-    </label>
-  </section>
+    <div class="theme-studio-main">
+      <section class="settings-section theme-section-card">
+        <div class="settings-row">
+          <div>
+            <div class="section-title">Local Media</div>
+            <div class="settings-subtitle">Pick or link a background from the host machine.</div>
+          </div>
+          {#if prefersBrowserFilePicker}
+            <label class="ghost-button file-button" for="theme-upload-input">Choose Background File</label>
+          {:else}
+            <button class="ghost-button" type="button" on:click={linkLocalThemeMedia}>Apply Host File</button>
+          {/if}
+        </div>
+        {#if prefersBrowserFilePicker}
+          <input id="theme-upload-input" class="visually-hidden" type="file" accept="image/*,video/*" on:change={chooseBrowserLocalMedia}>
+        {:else}
+          <div class="settings-form-grid">
+            <label class="settings-field settings-field-full">
+              <span class="settings-field-label">Host file path</span>
+              <input
+                id="theme-local-link-path"
+                name="theme-local-link-path"
+                class="settings-input"
+                type="text"
+                placeholder="C:\\Media\\Wallpaper.mp4"
+                bind:value={localLinkPath}
+                on:keydown={(event) => event.key === "Enter" && linkLocalThemeMedia()} />
+            </label>
+          </div>
+        {/if}
+        {#if localLinkState !== "idle"}
+          <div class={`upload-status upload-status-${localLinkState}`.trim()}>
+            <div class="footer-note">{localLinkMessage}</div>
+          </div>
+        {/if}
+        <div class="media-grid media-grid-wide">
+          {#if localMedia.length}
+            {#each localMedia as asset}
+              <article class={`media-card ${(effectiveBackground?.source === "local" && effectiveBackground?.assetId === asset.id) ? "is-selected" : ""}`.trim()}>
+                <div class="media-card-preview">
+                  {#if asset.mediaKind === "video"}
+                    <video src={asset.previewUrl} muted loop playsinline preload="metadata"></video>
+                  {:else}
+                    <img src={asset.previewUrl} alt={asset.name}>
+                  {/if}
+                </div>
+                <div class="media-card-body">
+                  <strong>{asset.name}</strong>
+                  <div class="footer-note">{asset.isLinked ? "Linked" : "Imported"} · {asset.mediaKind === "video" ? "Video" : "Image"} · {formatBytes(asset.sizeBytes)}</div>
+                  <div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div>
+                </div>
+                <div class="media-card-actions">
+                  <button class="ghost-button" type="button" on:click={() => selectLocalMedia(asset)}>Apply</button>
+                  <button class="ghost-button danger" type="button" on:click={() => deleteLocalMedia(asset.id)}>Remove</button>
+                </div>
+              </article>
+            {/each}
+          {:else}
+            <div class="mini-card"><div class="footer-note">{prefersBrowserFilePicker ? "Choose a file from this computer to apply it instantly for this browser session." : "Paste a full file path from the host PC and Studio will render it directly without copying it."}</div></div>
+          {/if}
+        </div>
+      </section>
 
-  <section class="settings-section">
-    <div class="settings-row">
-      <div class="section-title">Local Media</div>
-      {#if prefersBrowserFilePicker}
-        <label class="ghost-button file-button" for="theme-upload-input">Choose Background File</label>
-      {:else}
-        <button class="ghost-button" type="button" on:click={linkLocalThemeMedia}>Apply Host File</button>
-      {/if}
-    </div>
-    {#if prefersBrowserFilePicker}
-      <input id="theme-upload-input" class="visually-hidden" type="file" accept="image/*,video/*" on:change={chooseBrowserLocalMedia}>
-    {:else}
-      <div class="settings-form-grid">
-        <label class="settings-field settings-field-full">
-          <span class="settings-field-label">Host file path</span>
-          <input
-            id="theme-local-link-path"
-            name="theme-local-link-path"
-            class="settings-input"
-            type="text"
-            placeholder="C:\\Media\\Wallpaper.mp4"
-            bind:value={localLinkPath}
-            on:keydown={(event) => event.key === "Enter" && linkLocalThemeMedia()} />
-        </label>
-      </div>
-    {/if}
-    {#if localLinkState !== "idle"}
-      <div class={`upload-status upload-status-${localLinkState}`.trim()}>
-        <div class="footer-note">{localLinkMessage}</div>
-      </div>
-    {/if}
-    <div class="media-grid">
-      {#if localMedia.length}
-        {#each localMedia as asset}
-          <article class={`media-card ${(effectiveBackground?.source === "local" && effectiveBackground?.assetId === asset.id) ? "is-selected" : ""}`.trim()}>
-            <div class="media-card-preview">
-              {#if asset.mediaKind === "video"}
-                <video src={asset.previewUrl} muted loop playsinline preload="metadata"></video>
-              {:else}
-                <img src={asset.previewUrl} alt={asset.name}>
-              {/if}
-            </div>
-            <div class="media-card-body">
-              <strong>{asset.name}</strong>
-              <div class="footer-note">{asset.isLinked ? "Linked" : "Imported"} · {asset.mediaKind === "video" ? "Video" : "Image"} · {formatBytes(asset.sizeBytes)}</div>
-              <div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div>
-            </div>
-            <div class="media-card-actions">
-              <button class="ghost-button" type="button" on:click={() => selectLocalMedia(asset)}>Apply</button>
-              <button class="ghost-button danger" type="button" on:click={() => deleteLocalMedia(asset.id)}>Remove</button>
-            </div>
-          </article>
-        {/each}
-      {:else}
-        <div class="mini-card"><div class="footer-note">{prefersBrowserFilePicker ? "Choose a file from this computer to apply it instantly for this browser session." : "Paste a full file path from the host PC and Studio will render it directly without copying it."}</div></div>
-      {/if}
-    </div>
-  </section>
+      <section class="settings-section theme-section-card">
+        <div class="settings-row">
+          <div>
+            <div class="section-title">Pexels Search</div>
+            <div class="settings-subtitle">Search photos and videos and apply them as live Studio backgrounds.</div>
+          </div>
+          <button class="ghost-button" type="button" on:click={savePexelsKey}>Save key</button>
+        </div>
+        <div class="theme-pexels-toolbar">
+          <label class="settings-field">
+            <span class="settings-field-label">Pexels API key</span>
+            <input id="theme-pexels-api-key" name="theme-pexels-api-key" class="settings-input" type="password" autocomplete="new-password" bind:value={themeForm.pexelsApiKey}>
+            <span class="settings-hint">{settingsMask(preferences?.theme?.pexelsApiKeyHint)}</span>
+          </label>
+          <label class="settings-field">
+            <span class="settings-field-label">Search</span>
+            <input id="theme-pexels-search" name="theme-pexels-search" class="settings-input" type="search" bind:value={pexelsQuery} on:keydown={(event) => event.key === "Enter" && runPexelsSearch(1)}>
+          </label>
+          <div class="theme-pexels-actions">
+            <button class={`toggle-pill ${pexelsKind === "image" ? "is-active" : ""}`.trim()} type="button" on:click={() => { pexelsKind = "image"; runPexelsSearch(1); }}>Photos</button>
+            <button class={`toggle-pill ${pexelsKind === "video" ? "is-active" : ""}`.trim()} type="button" on:click={() => { pexelsKind = "video"; runPexelsSearch(1); }}>Videos</button>
+            <button class="toggle-pill" type="button" on:click={() => runPexelsSearch(1)}>Search</button>
+          </div>
+        </div>
+        {#if themeRecentSearches.length}
+          <div class="settings-row">
+            <div class="section-title">Recent searches</div>
+            <button class="ghost-button" type="button" on:click={clearRecentThemeSearches}>Clear</button>
+          </div>
+          <div class="toggle-grid recent-search-grid">
+            {#each themeRecentSearches as recentSearch}
+              <button class="toggle-pill" type="button" on:click={() => { pexelsQuery = recentSearch; runPexelsSearch(1); }}>{recentSearch}</button>
+            {/each}
+          </div>
+        {/if}
+        <div class="settings-row media-pagination">
+          <button class="ghost-button" type="button" disabled={(pexelsResult?.page ?? 1) <= 1} on:click={() => runPexelsSearch((pexelsResult?.page ?? 1) - 1)}>Prev</button>
+          <div class="settings-subtitle">Page {pexelsResult?.page ?? 1}</div>
+          <button class="ghost-button" type="button" disabled={!pexelsResult?.nextPage} on:click={() => runPexelsSearch((pexelsResult?.page ?? 1) + 1)}>Next</button>
+        </div>
+        <div class="toggle-grid page-pill-grid">
+          {#each themePages() as page}
+            <button class={`toggle-pill ${page === (pexelsResult?.page ?? 1) ? "is-active" : ""}`.trim()} type="button" on:click={() => runPexelsSearch(page)}>{page}</button>
+          {/each}
+        </div>
+        <div class="media-grid media-grid-search media-grid-wide">
+          {#if pexelsResult?.results?.length}
+            {#each pexelsResult.results as asset}
+              <article class={`media-card ${selectedPexels(asset) ? "is-selected" : ""}`.trim()}>
+                <div class="media-card-preview"><img src={asset.previewUrl} alt={asset.label}></div>
+                <div class="media-card-body"><strong>{asset.label}</strong><div class="footer-note">{asset.attribution}</div><div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div></div>
+                <div class="media-card-actions">
+                  <button class="ghost-button" type="button" on:click={() => selectPexelsResult(asset)}>Apply</button>
+                  <button class={`ghost-button ${themeAssetIsFavorite(asset) ? "is-active" : ""}`.trim()} type="button" on:click={() => togglePexelsFavorite(asset)}>{themeAssetIsFavorite(asset) ? "Saved" : "Save"}</button>
+                  <a class="ghost-button" href={asset.pexelsUrl} target="_blank" rel="noreferrer">Pexels</a>
+                </div>
+              </article>
+            {/each}
+          {:else}
+            <div class="mini-card"><div class="footer-note">Search Pexels for photos or videos to use as Studio backgrounds.</div></div>
+          {/if}
+        </div>
+        <div class="warning-text">{pexelsWarning}</div>
+      </section>
 
-  <section class="settings-section">
-    <div class="settings-row">
-      <div class="section-title">Pexels Search</div>
-      <button class="ghost-button" type="button" on:click={savePexelsKey}>Save key</button>
+      <section class="settings-section theme-section-card">
+        <div class="section-title">Saved Pexels picks</div>
+        <div class="media-grid media-grid-search media-grid-wide">
+          {#if themeFavoriteAssets.length}
+            {#each themeFavoriteAssets as asset}
+              <article class={`media-card ${selectedPexels(asset) ? "is-selected" : ""}`.trim()}>
+                <div class="media-card-preview"><img src={asset.previewUrl} alt={asset.label}></div>
+                <div class="media-card-body"><strong>{asset.label}</strong><div class="footer-note">{asset.attribution}</div><div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div></div>
+                <div class="media-card-actions">
+                  <button class="ghost-button" type="button" on:click={() => selectPexelsResult(asset)}>Apply</button>
+                  <button class="ghost-button danger" type="button" on:click={() => togglePexelsFavorite(asset)}>Remove</button>
+                </div>
+              </article>
+            {/each}
+          {:else}
+            <div class="mini-card"><div class="footer-note">Save the best Pexels results here so each device can reuse them quickly.</div></div>
+          {/if}
+        </div>
+      </section>
     </div>
-    <label class="settings-field">
-      <span class="settings-field-label">Pexels API key</span>
-      <input id="theme-pexels-api-key" name="theme-pexels-api-key" class="settings-input" type="password" autocomplete="new-password" bind:value={themeForm.pexelsApiKey}>
-      <span class="settings-hint">{settingsMask(preferences?.theme?.pexelsApiKeyHint)}</span>
-    </label>
-    <div class="settings-form-grid">
-      <label class="settings-field settings-field-full"><span class="settings-field-label">Search</span><input id="theme-pexels-search" name="theme-pexels-search" class="settings-input" type="search" bind:value={pexelsQuery} on:keydown={(event) => event.key === "Enter" && runPexelsSearch(1)}></label>
-    </div>
-    {#if themeRecentSearches.length}
-      <div class="settings-row">
-        <div class="section-title">Recent searches</div>
-        <button class="ghost-button" type="button" on:click={clearRecentThemeSearches}>Clear</button>
-      </div>
-      <div class="toggle-grid recent-search-grid">
-        {#each themeRecentSearches as recentSearch}
-          <button class="toggle-pill" type="button" on:click={() => { pexelsQuery = recentSearch; runPexelsSearch(1); }}>{recentSearch}</button>
-        {/each}
-      </div>
-    {/if}
-    <div class="settings-row media-search-actions">
-      <button class="ghost-button" type="button" on:click={() => runPexelsSearch(1)}>Search</button>
-    </div>
-    <div class="toggle-grid">
-      <button class={`toggle-pill ${pexelsKind === "image" ? "is-active" : ""}`.trim()} type="button" on:click={() => { pexelsKind = "image"; runPexelsSearch(1); }}>Photos</button>
-      <button class={`toggle-pill ${pexelsKind === "video" ? "is-active" : ""}`.trim()} type="button" on:click={() => { pexelsKind = "video"; runPexelsSearch(1); }}>Videos</button>
-    </div>
-    <div class="settings-row media-pagination">
-      <button class="ghost-button" type="button" disabled={(pexelsResult?.page ?? 1) <= 1} on:click={() => runPexelsSearch((pexelsResult?.page ?? 1) - 1)}>Prev</button>
-      <div class="settings-subtitle">Page {pexelsResult?.page ?? 1}</div>
-      <button class="ghost-button" type="button" disabled={!pexelsResult?.nextPage} on:click={() => runPexelsSearch((pexelsResult?.page ?? 1) + 1)}>Next</button>
-    </div>
-    <div class="toggle-grid page-pill-grid">
-      {#each themePages() as page}
-        <button class={`toggle-pill ${page === (pexelsResult?.page ?? 1) ? "is-active" : ""}`.trim()} type="button" on:click={() => runPexelsSearch(page)}>{page}</button>
-      {/each}
-    </div>
-    <div class="media-grid media-grid-search">
-      {#if pexelsResult?.results?.length}
-        {#each pexelsResult.results as asset}
-          <article class={`media-card ${selectedPexels(asset) ? "is-selected" : ""}`.trim()}>
-            <div class="media-card-preview"><img src={asset.previewUrl} alt={asset.label}></div>
-            <div class="media-card-body"><strong>{asset.label}</strong><div class="footer-note">{asset.attribution}</div><div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div></div>
-            <div class="media-card-actions">
-              <button class="ghost-button" type="button" on:click={() => selectPexelsResult(asset)}>Apply</button>
-              <button class={`ghost-button ${themeAssetIsFavorite(asset) ? "is-active" : ""}`.trim()} type="button" on:click={() => togglePexelsFavorite(asset)}>{themeAssetIsFavorite(asset) ? "Saved" : "Save"}</button>
-              <a class="ghost-button" href={asset.pexelsUrl} target="_blank" rel="noreferrer">Pexels</a>
-            </div>
-          </article>
-        {/each}
-      {:else}
-        <div class="mini-card"><div class="footer-note">Search Pexels for photos or videos to use as Studio backgrounds.</div></div>
-      {/if}
-    </div>
-    <div class="warning-text">{pexelsWarning}</div>
-  </section>
-
-  <section class="settings-section">
-    <div class="section-title">Saved Pexels picks</div>
-    <div class="media-grid media-grid-search">
-      {#if themeFavoriteAssets.length}
-        {#each themeFavoriteAssets as asset}
-          <article class={`media-card ${selectedPexels(asset) ? "is-selected" : ""}`.trim()}>
-            <div class="media-card-preview"><img src={asset.previewUrl} alt={asset.label}></div>
-            <div class="media-card-body"><strong>{asset.label}</strong><div class="footer-note">{asset.attribution}</div><div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div></div>
-            <div class="media-card-actions">
-              <button class="ghost-button" type="button" on:click={() => selectPexelsResult(asset)}>Apply</button>
-              <button class="ghost-button danger" type="button" on:click={() => togglePexelsFavorite(asset)}>Remove</button>
-            </div>
-          </article>
-        {/each}
-      {:else}
-        <div class="mini-card"><div class="footer-note">Save the best Pexels results here so each device can reuse them quickly.</div></div>
-      {/if}
-    </div>
-  </section>
+  </div>
   </form>
 </aside>
 <div class="dashboard-viewport" bind:this={viewportEl}>
