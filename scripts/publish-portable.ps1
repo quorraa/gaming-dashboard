@@ -15,6 +15,7 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
 $projectPath = Join-Path $repoRoot "src\\Monitor.Server\\Monitor.Server.csproj"
 $publishRoot = Join-Path $OutputRoot "publish"
 $publishDir = Join-Path $publishRoot "$Runtime-$Configuration"
+$appDir = Join-Path $publishDir "app"
 $zipPath = Join-Path $OutputRoot "gaming-dashboard-$Runtime-$Configuration.zip"
 
 Write-Host "Building Studio frontend"
@@ -33,38 +34,72 @@ if (Test-Path $publishDir) {
     Remove-Item $publishDir -Recurse -Force
 }
 
-New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+New-Item -ItemType Directory -Path $appDir -Force | Out-Null
 
 $publishArgs = @(
     "publish", $projectPath,
     "-c", $Configuration,
     "-r", $Runtime,
     "--self-contained", "true",
-    "-o", $publishDir,
+    "-o", $appDir,
     "-p:PublishSingleFile=true",
     "-p:IncludeNativeLibrariesForSelfExtract=true",
     "-p:EnableCompressionInSingleFile=true"
 )
 
-Write-Host "Publishing self-contained package to $publishDir"
+Write-Host "Publishing self-contained package to $appDir"
 & dotnet @publishArgs
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE."
 }
 
 foreach ($localOnlyFile in @("dashboard.user.json", "appsettings.Development.json")) {
-    $candidate = Join-Path $publishDir $localOnlyFile
+    $candidate = Join-Path $appDir $localOnlyFile
     if (Test-Path $candidate) {
         Remove-Item $candidate -Force
     }
 }
+
+$launcherCmd = @"
+@echo off
+setlocal
+set "APP_DIR=%~dp0app"
+if not exist "%APP_DIR%\Monitor.Server.exe" (
+  echo Monitor.Server.exe was not found in "%APP_DIR%".
+  pause
+  exit /b 1
+)
+pushd "%APP_DIR%"
+start "" "%APP_DIR%\Monitor.Server.exe"
+popd
+"@
+
+Set-Content -Path (Join-Path $publishDir "Launch Gaming Dashboard.cmd") -Value $launcherCmd -Encoding ASCII
+
+$launcherPs1 = @"
+$ErrorActionPreference = 'Stop'
+$appDir = Join-Path $PSScriptRoot 'app'
+$exePath = Join-Path $appDir 'Monitor.Server.exe'
+if (-not (Test-Path $exePath)) {
+    throw "Monitor.Server.exe was not found in '$appDir'."
+}
+Start-Process -FilePath $exePath -WorkingDirectory $appDir
+"@
+
+Set-Content -Path (Join-Path $publishDir "Launch Gaming Dashboard.ps1") -Value $launcherPs1 -Encoding ASCII
 
 $portableReadme = @"
 Gaming Dashboard portable package
 ================================
 
 Run:
-  .\Monitor.Server.exe
+  .\Launch Gaming Dashboard.cmd
+
+Layout:
+  .\Launch Gaming Dashboard.cmd
+  .\Launch Gaming Dashboard.ps1
+  .\app\Monitor.Server.exe
+  .\app\wwwroot\...
 
 Recommended first-run steps:
   1. Run ..\scripts\install-prereqs.ps1 on the target machine.
