@@ -2090,18 +2090,14 @@ function fitDashboardToViewport() {
   dashboard.style.marginLeft = "";
 
   const availableWidth = viewport.clientWidth;
-  const availableHeight = viewport.clientHeight;
   const naturalWidth = dashboard.scrollWidth;
   const naturalHeight = dashboard.scrollHeight;
-  if (!availableWidth || !availableHeight || !naturalWidth || !naturalHeight) {
+  if (!availableWidth || !naturalWidth || !naturalHeight) {
     return;
   }
 
   const widthScale = availableWidth / naturalWidth;
-  const scaledHeightAtFullWidth = naturalHeight * widthScale;
-  const scale = scaledHeightAtFullWidth <= availableHeight
-    ? Math.min(1, widthScale)
-    : Math.min(1, availableHeight / naturalHeight);
+  const scale = Math.min(1, widthScale);
 
   dashboard.style.width = `${naturalWidth}px`;
   dashboard.style.height = `${naturalHeight}px`;

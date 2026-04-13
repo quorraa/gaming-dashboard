@@ -577,8 +577,10 @@
       String(panel.key).toLowerCase() === String(panelKey).toLowerCase()
         ? { ...panel, ...patch }
         : panel);
-    const resolved = resolvePriorityLayoutPanels(currentProfile.panels, currentProfile.columns, currentProfile.rows, panelKey);
-    currentProfile.panels = resolved.panels;
+    const visibleSet = currentVisiblePanelSet();
+    const { visible } = splitVisibleLayoutPanels(currentProfile.panels, visibleSet);
+    const resolved = resolvePriorityLayoutPanels(visible, currentProfile.columns, currentProfile.rows, panelKey);
+    currentProfile.panels = mergeVisibleLayoutPanels(currentProfile.panels, resolved.panels, visibleSet);
     currentProfile.rows = Math.max(currentProfile.rows, resolved.rows);
     layoutPreview = root;
   }
@@ -601,8 +603,10 @@
     const currentProfile = getMutableLayoutTarget(root, profile);
     currentProfile.columns = clampNumber(layoutColumnsValue, 1, 120);
     currentProfile.rows = clampNumber(layoutRowsValue, 1, 120);
-    const resolved = normalizeLayoutPanels(currentProfile.panels ?? [], currentProfile.columns, currentProfile.rows, "");
-    currentProfile.panels = resolved.panels;
+    const visibleSet = currentVisiblePanelSet();
+    const { visible } = splitVisibleLayoutPanels(currentProfile.panels ?? [], visibleSet);
+    const resolved = normalizeLayoutPanels(visible, currentProfile.columns, currentProfile.rows, "");
+    currentProfile.panels = mergeVisibleLayoutPanels(currentProfile.panels ?? [], resolved.panels, visibleSet);
     currentProfile.rows = Math.max(currentProfile.rows, resolved.rows);
     layoutPreview = root;
     await persistLayout(profile, {
@@ -1386,13 +1390,11 @@
       return;
     }
     const availableWidth = viewportEl.clientWidth;
-    const availableHeight = viewportEl.clientHeight;
     const naturalWidth = dashboardEl.scrollWidth;
     const naturalHeight = dashboardEl.scrollHeight;
-    if (!availableWidth || !availableHeight || !naturalWidth || !naturalHeight) return;
+    if (!availableWidth || !naturalWidth || !naturalHeight) return;
     const widthScale = availableWidth / naturalWidth;
-    const heightScale = availableHeight / naturalHeight;
-    fitScale = Math.min(1, naturalHeight * widthScale <= availableHeight ? widthScale : heightScale);
+    fitScale = Math.min(1, widthScale);
     fitWidth = `${naturalWidth}px`;
     fitHeight = `${naturalHeight}px`;
     fitMarginLeft = `${Math.max(0, (availableWidth - naturalWidth * fitScale) / 2)}px`;
@@ -1601,6 +1603,23 @@
     return variant;
   }
 
+  function currentVisiblePanelSet(panelKeys = panelForm.length ? panelForm : (preferences?.visiblePanels ?? defaultPanelKeys)) {
+    return new Set((panelKeys ?? []).map((item) => String(item).toLowerCase()));
+  }
+
+  function splitVisibleLayoutPanels(panels, visibleSet = currentVisiblePanelSet()) {
+    const source = Array.isArray(panels) ? panels : [];
+    return {
+      visible: source.filter((panel) => visibleSet.has(String(panel.key).toLowerCase())),
+      hidden: source.filter((panel) => !visibleSet.has(String(panel.key).toLowerCase()))
+    };
+  }
+
+  function mergeVisibleLayoutPanels(originalPanels, resolvedVisiblePanels, visibleSet = currentVisiblePanelSet()) {
+    const { hidden } = splitVisibleLayoutPanels(originalPanels, visibleSet);
+    return [...resolvedVisiblePanels, ...hidden];
+  }
+
   function panelsOverlap(left, right) {
     return left.x < right.x + right.w
       && left.x + left.w > right.x
@@ -1807,6 +1826,19 @@
       : editorState;
     try {
       await saveSettings({ visiblePanels: nextPanels });
+      const root = structuredClone(preferences?.layout ?? snapshot?.ui?.layout ?? {});
+      const profile = profileKey;
+      const currentProfile = getMutableLayoutTarget(root, profile);
+      const visibleSet = currentVisiblePanelSet(nextPanels);
+      const { visible } = splitVisibleLayoutPanels(currentProfile.panels ?? [], visibleSet);
+      const resolved = normalizeLayoutPanels(visible, currentProfile.columns, currentProfile.rows, "");
+      currentProfile.panels = mergeVisibleLayoutPanels(currentProfile.panels ?? [], resolved.panels, visibleSet);
+      currentProfile.rows = Math.max(currentProfile.rows, resolved.rows);
+      await persistLayout(profile, {
+        columns: currentProfile.columns,
+        rows: currentProfile.rows,
+        panels: (currentProfile.panels ?? []).map((panel) => ({ key: panel.key, x: panel.x, y: panel.y, w: panel.w, h: panel.h, locked: panel.locked }))
+      });
     } catch {
       await loadInitial();
     }

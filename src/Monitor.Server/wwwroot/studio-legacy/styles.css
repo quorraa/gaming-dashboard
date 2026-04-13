@@ -1592,6 +1592,8 @@ body.layout-phone-landscape {
 body.layout-phone-landscape.is-fitted .dashboard-viewport {
   height: calc(100vh - 16px);
   height: calc(100dvh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 body.layout-phone-landscape .dashboard {
