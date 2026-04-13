@@ -4,10 +4,10 @@ import path from "node:path";
 
 export default defineConfig({
   root: path.resolve(__dirname),
-  base: "/studio-next/",
+  base: "/studio/",
   plugins: [svelte()],
   build: {
-    outDir: path.resolve(__dirname, "../Monitor.Server/wwwroot/studio-next"),
+    outDir: path.resolve(__dirname, "../Monitor.Server/wwwroot/studio"),
     emptyOutDir: true,
     assetsDir: "assets"
   }

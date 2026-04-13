@@ -27,17 +27,20 @@ public sealed class DashboardPreferencesStore
     private readonly Lock _lock = new();
     private readonly string _path;
     private readonly ILogger<DashboardPreferencesStore> _logger;
+    private readonly ThemeMediaService _themeMediaService;
     private DashboardPreferencesSnapshot _current;
 
     public DashboardPreferencesStore(
         DashboardSettings settings,
+        ThemeMediaService themeMediaService,
         IHostEnvironment environment,
         ILogger<DashboardPreferencesStore> logger)
     {
         _logger = logger;
+        _themeMediaService = themeMediaService;
         _path = ResolvePreferencesPath(environment);
         TryMigrateLegacyPreferences(environment.ContentRootPath, _path);
-        _current = Load(settings);
+        _current = SanitizeMissingLocalMediaReferences(Load(settings));
     }
 
     public DashboardPreferencesSnapshot Current
@@ -150,7 +153,7 @@ public sealed class DashboardPreferencesStore
                     ? currentTheme.FavoriteAssets
                     : NormalizePexelsAssets(themeUpdate.FavoriteAssets));
 
-            _current = new DashboardPreferencesSnapshot(visiblePanels, audio, discord, spotify, layout, theme);
+            _current = SanitizeMissingLocalMediaReferences(new DashboardPreferencesSnapshot(visiblePanels, audio, discord, spotify, layout, theme));
             PersistUnsafe();
             return _current;
         }
@@ -295,6 +298,44 @@ public sealed class DashboardPreferencesStore
         {
             _logger.LogWarning(ex, "Failed to persist dashboard.user.json.");
         }
+    }
+
+    private DashboardPreferencesSnapshot SanitizeMissingLocalMediaReferences(DashboardPreferencesSnapshot snapshot)
+    {
+        var theme = snapshot.Theme;
+        var sanitizedBackground = SanitizeThemeBackgroundReference(theme.Background);
+        var sanitizedVariants = theme.Variants
+            .Select(variant => variant with
+            {
+                Background = SanitizeThemeBackgroundReference(variant.Background)
+            })
+            .ToArray();
+
+        if (sanitizedBackground == theme.Background && sanitizedVariants.SequenceEqual(theme.Variants))
+        {
+            return snapshot;
+        }
+
+        return snapshot with
+        {
+            Theme = theme with
+            {
+                Background = sanitizedBackground,
+                Variants = sanitizedVariants
+            }
+        };
+    }
+
+    private ThemeBackgroundSnapshot SanitizeThemeBackgroundReference(ThemeBackgroundSnapshot background)
+    {
+        if (!string.Equals(background.Source, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            return background;
+        }
+
+        return _themeMediaService.HasAsset(background.AssetId)
+            ? background
+            : ThemeBackgroundSnapshot.Empty;
     }
 
     private static string[] NormalizePanels(IEnumerable<string> candidatePanels, IEnumerable<string> fallback)

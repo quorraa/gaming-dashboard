@@ -84,15 +84,77 @@ public sealed class ThemeMediaService
 
         lock (_lock)
         {
-            var entry = new MediaLibraryEntry(
-                id,
-                string.IsNullOrWhiteSpace(file.FileName) ? storedFileName : file.FileName,
-                storedFileName,
-                mediaKind,
-                file.Length,
-                DateTimeOffset.UtcNow);
+            var entry = new MediaLibraryEntry
+            {
+                Id = id,
+                DisplayName = string.IsNullOrWhiteSpace(file.FileName) ? storedFileName : file.FileName,
+                StoredFileName = storedFileName,
+                MediaKind = mediaKind,
+                SizeBytes = file.Length,
+                AddedAt = DateTimeOffset.UtcNow,
+                IsLinked = false,
+                SourcePath = string.Empty
+            };
 
             _entries.RemoveAll(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            _entries.Add(entry);
+            PersistUnsafe();
+            return ToSnapshot(entry);
+        }
+    }
+
+    public MediaAssetSnapshot RegisterLinkedFile(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            throw new InvalidOperationException("Local file path is required.");
+        }
+
+        var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(sourcePath.Trim().Trim('"')));
+        if (!Path.IsPathFullyQualified(fullPath))
+        {
+            throw new InvalidOperationException("Use a full local file path.");
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            throw new InvalidOperationException("Local file does not exist.");
+        }
+
+        var fileInfo = new FileInfo(fullPath);
+        var mediaKind = DetectMediaKind(fileInfo.Extension, null);
+        if (mediaKind == "none")
+        {
+            throw new InvalidOperationException("Only image and video files are supported.");
+        }
+
+        lock (_lock)
+        {
+            var existing = _entries.FirstOrDefault(item =>
+                item.IsLinked &&
+                string.Equals(item.SourcePath, fullPath, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                existing.DisplayName = fileInfo.Name;
+                existing.MediaKind = mediaKind;
+                existing.SizeBytes = fileInfo.Length;
+                existing.AddedAt = DateTimeOffset.UtcNow;
+                PersistUnsafe();
+                return ToSnapshot(existing);
+            }
+
+            var entry = new MediaLibraryEntry
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                DisplayName = fileInfo.Name,
+                StoredFileName = string.Empty,
+                MediaKind = mediaKind,
+                SizeBytes = fileInfo.Length,
+                AddedAt = DateTimeOffset.UtcNow,
+                IsLinked = true,
+                SourcePath = fullPath
+            };
+
             _entries.Add(entry);
             PersistUnsafe();
             return ToSnapshot(entry);
@@ -109,8 +171,8 @@ public sealed class ThemeMediaService
                 return false;
             }
 
-            var fullPath = Path.Combine(_mediaRoot, entry.StoredFileName);
-            if (File.Exists(fullPath))
+            var fullPath = ResolveFullPath(entry);
+            if (!entry.IsLinked && File.Exists(fullPath))
             {
                 File.Delete(fullPath);
             }
@@ -134,10 +196,24 @@ public sealed class ThemeMediaService
                 return false;
             }
 
-            fullPath = Path.Combine(_mediaRoot, entry.StoredFileName);
+            fullPath = ResolveFullPath(entry);
             mediaKind = entry.MediaKind;
             fileName = entry.DisplayName;
             return File.Exists(fullPath);
+        }
+    }
+
+    public bool HasAsset(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return false;
+        }
+
+        lock (_lock)
+        {
+            var entry = _entries.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            return entry is not null && File.Exists(ResolveFullPath(entry));
         }
     }
 
@@ -151,7 +227,8 @@ public sealed class ThemeMediaService
             }
 
             var json = File.ReadAllText(_manifestPath);
-            return JsonSerializer.Deserialize<List<MediaLibraryEntry>>(json, JsonOptions) ?? [];
+            using var document = JsonDocument.Parse(json);
+            return ParseEntries(document.RootElement);
         }
         catch (Exception ex)
         {
@@ -159,6 +236,79 @@ public sealed class ThemeMediaService
             return [];
         }
     }
+
+    private static List<MediaLibraryEntry> ParseEntries(JsonElement root)
+    {
+        return root.ValueKind switch
+        {
+            JsonValueKind.Array => root.EnumerateArray()
+                .SelectMany(ParseEntryNode)
+                .Where(entry => !string.IsNullOrWhiteSpace(entry.Id))
+                .ToList(),
+            JsonValueKind.Object => ParseEntry(root) is { Id.Length: > 0 } entry ? [entry] : [],
+            _ => []
+        };
+    }
+
+    private static IEnumerable<MediaLibraryEntry> ParseEntryNode(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var nested in element.EnumerateArray())
+            {
+                foreach (var entry in ParseEntryNode(nested))
+                {
+                    yield return entry;
+                }
+            }
+
+            yield break;
+        }
+
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var entry = ParseEntry(element);
+            if (!string.IsNullOrWhiteSpace(entry.Id))
+            {
+                yield return entry;
+            }
+        }
+    }
+
+    private static MediaLibraryEntry ParseEntry(JsonElement element)
+    {
+        return new MediaLibraryEntry
+        {
+            Id = GetString(element, "id"),
+            DisplayName = GetString(element, "displayName"),
+            StoredFileName = GetString(element, "storedFileName"),
+            MediaKind = GetString(element, "mediaKind", "none"),
+            SizeBytes = GetInt64(element, "sizeBytes"),
+            AddedAt = GetDateTimeOffset(element, "addedAt"),
+            IsLinked = GetBool(element, "isLinked"),
+            SourcePath = GetString(element, "sourcePath")
+        };
+    }
+
+    private static string GetString(JsonElement element, string propertyName, string fallback = "")
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString() ?? fallback
+            : fallback;
+
+    private static long GetInt64(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.TryGetInt64(out var value)
+            ? value
+            : 0L;
+
+    private static DateTimeOffset GetDateTimeOffset(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(property.GetString(), out var value)
+            ? value
+            : DateTimeOffset.UtcNow;
+
+    private static bool GetBool(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? property.GetBoolean()
+            : false;
 
     private void PersistUnsafe()
     {
@@ -177,7 +327,7 @@ public sealed class ThemeMediaService
     {
         var before = _entries.Count;
         _entries = _entries
-            .Where(entry => File.Exists(Path.Combine(_mediaRoot, entry.StoredFileName)))
+            .Where(entry => File.Exists(ResolveFullPath(entry)))
             .ToList();
 
         if (_entries.Count != before)
@@ -196,7 +346,15 @@ public sealed class ThemeMediaService
             url,
             url,
             entry.SizeBytes,
-            entry.AddedAt);
+            entry.AddedAt,
+            entry.IsLinked);
+    }
+
+    private string ResolveFullPath(MediaLibraryEntry entry)
+    {
+        return entry.IsLinked
+            ? entry.SourcePath
+            : Path.Combine(_mediaRoot, entry.StoredFileName);
     }
 
     private static string DetectMediaKind(string extension, string? contentType)
@@ -225,11 +383,15 @@ public sealed class ThemeMediaService
         return string.IsNullOrWhiteSpace(safe) ? "asset" : safe;
     }
 
-    private sealed record MediaLibraryEntry(
-        string Id,
-        string DisplayName,
-        string StoredFileName,
-        string MediaKind,
-        long SizeBytes,
-        DateTimeOffset AddedAt);
+    private sealed class MediaLibraryEntry
+    {
+        public string Id { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string StoredFileName { get; set; } = string.Empty;
+        public string MediaKind { get; set; } = "none";
+        public long SizeBytes { get; set; }
+        public DateTimeOffset AddedAt { get; set; }
+        public bool IsLinked { get; set; }
+        public string SourcePath { get; set; } = string.Empty;
+    }
 }

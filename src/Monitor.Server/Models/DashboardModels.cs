@@ -463,7 +463,10 @@ public sealed record MediaAssetSnapshot(
     string Url,
     string PreviewUrl,
     long SizeBytes,
-    DateTimeOffset AddedAt);
+    DateTimeOffset AddedAt,
+    bool IsLinked);
+
+public sealed record LocalMediaLinkRequest(string Path);
 
 public sealed record PexelsSearchResponseSnapshot(
     string MediaKind,

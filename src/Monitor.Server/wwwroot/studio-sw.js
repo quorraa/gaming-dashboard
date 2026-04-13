@@ -1,4 +1,4 @@
-const CACHE_NAME = "gaming-dashboard-studio-v4";
+const CACHE_NAME = "gaming-dashboard-studio-v6";
 
 async function broadcastStatus(type, statuses) {
   const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
@@ -26,7 +26,7 @@ self.addEventListener("message", event => {
 
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    const urls = [...new Set(event.data.urls.filter(Boolean))];
+    const urls = [...new Set(event.data.urls.filter(Boolean).filter(url => isCacheableMediaUrl(url)))];
     const statuses = {};
 
     if (event.data.type === "cache-status") {
@@ -73,8 +73,7 @@ self.addEventListener("fetch", event => {
   }
 
   const url = new URL(request.url);
-  const isMediaAsset = url.pathname.startsWith("/api/media/local/")
-    || url.pathname.startsWith("/api/media/pexels/stream");
+  const isMediaAsset = url.pathname.startsWith("/api/media/pexels/stream");
 
   if (!isMediaAsset) {
     return;
@@ -95,3 +94,12 @@ self.addEventListener("fetch", event => {
     return response;
   })());
 });
+
+function isCacheableMediaUrl(url) {
+  try {
+    const parsed = new URL(url, self.location.origin);
+    return parsed.pathname.startsWith("/api/media/pexels/stream");
+  } catch {
+    return false;
+  }
+}

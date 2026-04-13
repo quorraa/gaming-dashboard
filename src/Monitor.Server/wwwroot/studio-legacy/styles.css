@@ -96,7 +96,7 @@ body.studio-client {
 .theme-background-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
   filter: saturate(1.04) contrast(1.02);
 }
 

@@ -2746,6 +2746,11 @@ async function queueThemeAssetCache(urls) {
     return;
   }
 
+  const cacheableUrls = urls.filter(url => String(url || "").includes("/api/media/pexels/stream"));
+  if (!cacheableUrls.length) {
+    return;
+  }
+
   const registration = await navigator.serviceWorker.ready;
   const target = registration.active || navigator.serviceWorker.controller;
   if (!target) {
@@ -2754,7 +2759,7 @@ async function queueThemeAssetCache(urls) {
 
   target.postMessage({
     type: "cache-assets",
-    urls
+    urls: cacheableUrls
   });
 }
 

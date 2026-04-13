@@ -23,6 +23,11 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = Directory.Exists(bundledWebRoot) ? baseDirectory : Directory.GetCurrentDirectory()
 });
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = null;
+});
+
 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
     && string.IsNullOrWhiteSpace(builder.Configuration["urls"])
     && string.IsNullOrWhiteSpace(builder.Configuration["ASPNETCORE_URLS"]))
@@ -65,7 +70,7 @@ builder.Services.AddSingleton<PexelsService>();
 builder.Services.AddSingleton<SpotifyService>();
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 1024L * 1024 * 1024;
+    options.MultipartBodyLengthLimit = long.MaxValue;
 });
 builder.Services.AddSingleton<DashboardSnapshotBuilder>();
 builder.Services.AddSingleton<DashboardSocketServer>();
@@ -129,6 +134,20 @@ app.MapPost("/api/media/upload", async (
     try
     {
         var asset = await themeMediaService.SaveUploadAsync(file, cancellationToken);
+        return Results.Json(asset);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+app.MapPost("/api/media/link-local", (
+    LocalMediaLinkRequest request,
+    ThemeMediaService themeMediaService) =>
+{
+    try
+    {
+        var asset = themeMediaService.RegisterLinkedFile(request.Path);
         return Results.Json(asset);
     }
     catch (InvalidOperationException ex)
