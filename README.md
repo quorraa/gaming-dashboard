@@ -10,43 +10,90 @@ It combines:
 
 ## Preview
 
+All screenshots below are from the 11-inch iPad landscape layout unless noted otherwise.
+
 ### Studio
+
+`Main dashboard`
+Studio main view with live temps, Discord, Spotify, audio mixer, and system panels.
 
 ![Studio Main View](artifacts/previews/iPad-11inch-MainView.png)
 
+`Layout editing`
+Unlocked grid editing with drag, resize, and panel positioning on the live dashboard.
+
 ![Studio Layout Editing](artifacts/previews/iPad-11inch-DesignEdit.png)
+
+`Layout editing continued`
+Expanded layout pass showing denser panel placement and control-dock positioning.
 
 ![Studio Layout Editing Continued](artifacts/previews/iPad-11inch-DesignEdit-Continued.png)
 
+`Panel-focused editing`
+Closer panel edit view for refining placement and sizing without leaving Studio.
+
 ![Studio Panel Edit View](artifacts/previews/iPad-11inch-EditPanelView.png)
 
+`Text editor`
+On-page typography targeting mode for selecting and styling individual text roles.
+
 ![Studio Text Editor](artifacts/previews/iPad-11inch-TextEditor.png)
+
+`Text editor options`
+Animated preview of the live formatting controls used to restyle text in place.
 
 ![Studio Text Editor Options](artifacts/previews/iPad-11inch-TextEditorOptions.gif)
 
 ### Theme And Media
 
+`Pexels photo search`
+Theme browser view for searching and applying remote photo backgrounds.
+
 ![Studio Pexels Image Search](artifacts/previews/iPad-11inch-PexelsImage.png)
+
+`Pexels video search`
+Theme browser view for video backgrounds, paging, and media selection.
 
 ![Studio Pexels Video Search](artifacts/previews/iPad-11inch-PexelsVideo.png)
 
 ### Settings
 
+`Panels`
+Panel visibility controls for deciding which dashboard modules are shown on the current device layout.
+
 ![Studio Settings Panels](artifacts/previews/iPad-11inch-Settings-Panels.png)
+
+`Audio`
+Per-device and per-app audio visibility targeting, mixer behavior, and privacy controls.
 
 ![Studio Settings Audio](artifacts/previews/iPad-11inch-Settings-Audio.png)
 
+`Layout presets`
+Viewport-aware layout controls for saving grid density and panel arrangement by screen size.
+
 ![Studio Settings Layout Presets](artifacts/previews/iPad-11inch-Settings-LayoutPresets.png)
 
+`Discord integration`
+Hosted relay configuration so Discord data works without storing the bot token on the gaming PC.
+
 ![Studio Settings Discord](artifacts/previews/iPad-11inch-Settings-DiscordIntegration.png)
+
+`Spotify integration`
+Spotify connection and playback control setup for the Studio dashboard.
 
 ![Studio Settings Spotify](artifacts/previews/iPad-11inch-Settings-SpotifyIntegration.png)
 
 ### Vanilla
 
+`Vanilla client`
+Lightweight fallback client with the simpler dependency-light dashboard presentation.
+
 ![Vanilla Client](artifacts/previews/iPad-11inch-Vanilla.png)
 
 ### Phone View
+
+`Phone landscape`
+Only this preview is from the phone layout rather than the 11-inch iPad view.
 
 ![Phone View](artifacts/previews/Pixel10ProView.jpeg)
 
