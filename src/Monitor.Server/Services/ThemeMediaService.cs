@@ -174,7 +174,12 @@ public sealed class ThemeMediaService
             var fullPath = ResolveFullPath(entry);
             if (!entry.IsLinked && File.Exists(fullPath))
             {
+                File.SetAttributes(fullPath, FileAttributes.Normal);
                 File.Delete(fullPath);
+                if (File.Exists(fullPath))
+                {
+                    throw new InvalidOperationException("Saved media file could not be deleted from disk.");
+                }
             }
 
             _entries.RemoveAll(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));

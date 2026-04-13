@@ -83,7 +83,9 @@
   let localLinkPath = "";
   let localLinkState = "idle";
   let localLinkMessage = "";
+  let localLinkProgressPercent = 0;
   let prefersBrowserFilePicker = false;
+  let clientModeOverride = "auto";
   let sessionBackground = null;
   let sessionBackgroundObjectUrl = "";
   let settingsOpen = false;
@@ -154,6 +156,7 @@
   $: activeTheme = getActiveTheme(preferences?.theme, profileKey, viewportWidth, viewportHeight);
   $: background = activeTheme.background;
   $: effectiveBackground = sessionBackground ?? background;
+  $: effectiveBackgroundRenderUrl = resolveBackgroundRenderUrl(effectiveBackground);
   $: themePresetId = activeTheme.presetId;
   $: themeVisuals = activeTheme.visuals;
   $: themeTypography = activeTheme.typography;
@@ -176,6 +179,10 @@
   $: themeMediaStyle = buildThemeMediaStyle(effectiveThemeVisuals);
   $: themeScrimStyle = buildThemeScrimStyle(effectiveThemeVisuals);
   $: themeViewportLabel = `${profileKey.replace(/-/g, " ")} · ${viewportWidth}x${viewportHeight}`;
+  $: effectiveClientMode = clientModeOverride === "auto"
+    ? (prefersBrowserFilePicker ? "host" : "remote")
+    : clientModeOverride;
+  $: usesHostBrowserPicker = effectiveClientMode === "host";
   $: spotifyNow = snapshot?.spotify?.nowPlaying ?? null;
   $: shownSpotifyProgress = spotifySeekPreview ?? spotifyNow?.progressMs ?? 0;
   $: shownSpotifyVolume = spotifyVolumePreview ?? spotifyNow?.volumePercent ?? 0;
@@ -232,6 +239,7 @@
 
   onMount(() => {
     prefersBrowserFilePicker = detectBrowserLocalMediaMode();
+    clientModeOverride = loadClientModeOverride();
     updateViewport();
     loadInitial();
     connectSocket();
@@ -1053,6 +1061,7 @@
 
     localLinkState = "uploading";
     localLinkMessage = "Linking host file...";
+    localLinkProgressPercent = 100;
     try {
       const response = await fetch("/api/media/link-local", {
         method: "POST",
@@ -1072,9 +1081,11 @@
       await selectLocalMedia(asset);
       localLinkState = "success";
       localLinkMessage = `${asset.name} linked and applied.`;
+      localLinkProgressPercent = 100;
     } catch {
       localLinkState = "error";
       localLinkMessage = "Linking failed.";
+      localLinkProgressPercent = 0;
     }
   }
 
@@ -1087,6 +1098,25 @@
     return !mobileLike;
   }
 
+  function loadClientModeOverride() {
+    try {
+      const saved = localStorage.getItem("studio-client-mode");
+      return saved === "host" || saved === "remote" || saved === "auto"
+        ? saved
+        : "auto";
+    } catch {
+      return "auto";
+    }
+  }
+
+  function setClientModeOverride(mode) {
+    clientModeOverride = mode;
+    try {
+      localStorage.setItem("studio-client-mode", mode);
+    } catch {
+    }
+  }
+
   function clearSessionBackground() {
     if (sessionBackgroundObjectUrl) {
       URL.revokeObjectURL(sessionBackgroundObjectUrl);
@@ -1095,7 +1125,7 @@
     sessionBackground = null;
   }
 
-  async function chooseBrowserLocalMedia(event) {
+  async function previewBrowserLocalMedia(event) {
     const input = event.currentTarget;
     const file = input?.files?.[0];
     if (!file) return;
@@ -1109,6 +1139,7 @@
     if (mediaKind === "none") {
       localLinkState = "error";
       localLinkMessage = "Choose an image or video file.";
+      localLinkProgressPercent = 0;
       input.value = "";
       return;
     }
@@ -1126,8 +1157,108 @@
       attributionUrl: ""
     };
     localLinkState = "success";
-    localLinkMessage = `${file.name} applied for this browser session.`;
+    localLinkMessage = `${file.name} previewing on this PC only.`;
+    localLinkProgressPercent = 100;
     input.value = "";
+  }
+
+  async function saveBrowserLocalMedia(event) {
+    const input = event.currentTarget;
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    const mediaKind = file.type.startsWith("video/")
+      ? "video"
+      : file.type.startsWith("image/")
+        ? "image"
+        : "none";
+
+    if (mediaKind === "none") {
+      localLinkState = "error";
+      localLinkMessage = "Choose an image or video file.";
+      localLinkProgressPercent = 0;
+      input.value = "";
+      return;
+    }
+
+    clearSessionBackground();
+    localLinkState = "uploading";
+    localLinkMessage = `Saving ${file.name}...`;
+    localLinkProgressPercent = 0;
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file, file.name);
+      const response = await uploadLocalMedia(formData, file.name, (progress) => {
+        localLinkProgressPercent = progress;
+        localLinkMessage = `Saving ${file.name}... ${progress}%`;
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        localLinkState = "error";
+        localLinkMessage = error?.error || "Saving the file failed.";
+        localLinkProgressPercent = 0;
+        input.value = "";
+        return;
+      }
+
+      const asset = await response.json();
+      await refreshLocalMediaLibrary();
+      await selectLocalMedia(asset);
+      localLinkState = "success";
+      localLinkMessage = `${asset.name} saved and applied.`;
+      localLinkProgressPercent = 100;
+    } catch {
+      localLinkState = "error";
+      localLinkMessage = "Saving the file failed.";
+      localLinkProgressPercent = 0;
+    } finally {
+      input.value = "";
+    }
+  }
+
+  function uploadLocalMedia(formData, fileName, onProgress) {
+    return new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open("POST", "/api/media/upload", true);
+      request.responseType = "text";
+
+      request.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return;
+        }
+
+        const progress = Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100)));
+        onProgress(progress);
+      };
+
+      request.onerror = () => reject(new Error(`Saving ${fileName} failed.`));
+      request.onabort = () => reject(new Error(`Saving ${fileName} was cancelled.`));
+      request.onload = () => {
+        const body = request.responseText || "";
+        const headers = new Headers();
+        const rawHeaders = request.getAllResponseHeaders().trim().split(/\r?\n/);
+        for (const line of rawHeaders) {
+          if (!line) continue;
+          const separator = line.indexOf(":");
+          if (separator <= 0) continue;
+          headers.append(line.slice(0, separator).trim(), line.slice(separator + 1).trim());
+        }
+
+        resolve(new Response(body, {
+          status: request.status,
+          statusText: request.statusText,
+          headers
+        }));
+      };
+
+      request.send(formData);
+    });
+  }
+
+  async function chooseHostLocalMedia() {
+    await linkLocalThemeMedia();
   }
 
   async function saveThemeBackground(backgroundUpdate, urls = []) {
@@ -1141,14 +1272,26 @@
   const clearThemeBackground = () => saveThemeBackground({ source: "none", mediaKind: "none", assetId: "", label: "", renderUrl: "", previewUrl: "", attribution: "", attributionUrl: "" });
 
   async function deleteLocalMedia(assetId) {
+    localLinkState = "uploading";
+    localLinkMessage = "Removing saved media...";
+    localLinkProgressPercent = 100;
     const response = await fetch(`/api/media/local/${encodeURIComponent(assetId)}`, { method: "DELETE" });
-    if (response.ok) {
-      localMedia = localMedia.filter((asset) => asset.id !== assetId);
-      if (background?.source === "local" && background?.assetId === assetId) {
-        await clearThemeBackground();
-      }
-      requestVisibleThemeCacheStatus();
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      localLinkState = "error";
+      localLinkMessage = error?.error || "Removing saved media failed.";
+      localLinkProgressPercent = 0;
+      return;
     }
+
+    localMedia = localMedia.filter((asset) => asset.id !== assetId);
+    if (background?.source === "local" && background?.assetId === assetId) {
+      await clearThemeBackground();
+    }
+    localLinkState = "success";
+    localLinkMessage = "Saved media removed.";
+    localLinkProgressPercent = 100;
+    requestVisibleThemeCacheStatus();
   }
 
   async function runPexelsSearch(page = 1) {
@@ -1291,7 +1434,11 @@
   }
 
   function assetCacheUrls(asset) {
-    return [asset?.renderUrl ?? asset?.url ?? "", asset?.previewUrl ?? ""]
+    const renderUrl = asset?.source === "pexels-video" && asset?.assetId
+      ? buildAdaptivePexelsVideoUrl(asset.assetId)
+      : (asset?.renderUrl ?? asset?.url ?? "");
+
+    return [renderUrl, asset?.previewUrl ?? ""]
       .filter(Boolean)
       .filter(isCacheableThemeUrl);
   }
@@ -1568,6 +1715,27 @@
     const blurPx = Number(visuals?.blurPx ?? 12);
     const opacity = Math.max(0.15, Math.min(1, Number(visuals?.mediaOpacityPercent ?? 100) / 100));
     return `opacity:${opacity.toFixed(2)};filter:saturate(1.04) contrast(1.02) blur(${blurPx}px);transform:scale(${(1 + blurPx / 280).toFixed(3)});`;
+  }
+
+  function resolveBackgroundRenderUrl(backgroundValue) {
+    if (!backgroundValue?.renderUrl) {
+      return backgroundValue?.source === "pexels-video" && backgroundValue?.assetId
+        ? buildAdaptivePexelsVideoUrl(backgroundValue.assetId)
+        : "";
+    }
+
+    if (backgroundValue.source === "pexels-video" && backgroundValue.assetId) {
+      return buildAdaptivePexelsVideoUrl(backgroundValue.assetId);
+    }
+
+    return backgroundValue.renderUrl;
+  }
+
+  function buildAdaptivePexelsVideoUrl(assetId) {
+    const width = Math.max(1, Math.round(viewportWidth || window.innerWidth || 1280));
+    const height = Math.max(1, Math.round(viewportHeight || window.innerHeight || 720));
+    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    return `/api/media/pexels/video/${encodeURIComponent(assetId)}?width=${width}&height=${height}&dpr=${dpr.toFixed(2)}`;
   }
 
   function buildThemeScrimStyle(visuals) {
@@ -2061,11 +2229,11 @@
 </script>
 
 <div class="theme-media-layer" style={themeMediaStyle}>
-  {#if effectiveBackground?.renderUrl}
-    {#if effectiveBackground.mediaKind === "video"}
-      <video class="theme-background-video" src={effectiveBackground.renderUrl} poster={effectiveBackground.previewUrl || ""} autoplay muted loop playsinline preload="auto"></video>
+    {#if effectiveBackgroundRenderUrl}
+      {#if effectiveBackground.mediaKind === "video"}
+      <video class="theme-background-video" src={effectiveBackgroundRenderUrl} poster={effectiveBackground.previewUrl || ""} autoplay muted loop playsinline preload="auto"></video>
     {:else}
-      <img class="theme-background-image" src={effectiveBackground.renderUrl} alt={effectiveBackground.label || "Studio background"}>
+      <img class="theme-background-image" src={effectiveBackgroundRenderUrl} alt={effectiveBackground.label || "Studio background"}>
     {/if}
   {/if}
 </div>
@@ -2316,11 +2484,11 @@
           <div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(effectiveBackground ?? {}))}`}>{cacheLabelForUrls(assetCacheUrls(effectiveBackground ?? {}))}</div>
         </div>
         <div class="theme-active-preview">
-          {#if effectiveBackground?.renderUrl}
+          {#if effectiveBackgroundRenderUrl}
             {#if effectiveBackground.mediaKind === "video"}
-              <video class="theme-active-preview-media" src={effectiveBackground.renderUrl} muted loop autoplay playsinline preload="metadata"></video>
+              <video class="theme-active-preview-media" src={effectiveBackgroundRenderUrl} muted loop autoplay playsinline preload="metadata"></video>
             {:else}
-              <img class="theme-active-preview-media" src={effectiveBackground.renderUrl} alt={effectiveBackground.label || "Background preview"}>
+              <img class="theme-active-preview-media" src={effectiveBackgroundRenderUrl} alt={effectiveBackground.label || "Background preview"}>
             {/if}
           {:else}
             <div class="theme-active-preview-empty">Preset only</div>
@@ -2395,14 +2563,23 @@
             <div class="section-title">Local Media</div>
             <div class="settings-subtitle">Pick or link a background from the host machine.</div>
           </div>
-          {#if prefersBrowserFilePicker}
-            <label class="ghost-button file-button" for="theme-upload-input">Choose Background File</label>
+          <div class="toggle-grid compact-toggle-grid">
+            <button class={`toggle-pill ${effectiveClientMode === "host" ? "is-active" : ""}`.trim()} type="button" on:click={() => setClientModeOverride("host")}>✓ This PC</button>
+            <button class={`toggle-pill ${effectiveClientMode === "remote" ? "is-active" : ""}`.trim()} type="button" on:click={() => setClientModeOverride("remote")}>✓ Remote</button>
+            <button class={`toggle-pill ${clientModeOverride === "auto" ? "is-active" : ""}`.trim()} type="button" on:click={() => setClientModeOverride("auto")}>Auto</button>
+          </div>
+          {#if usesHostBrowserPicker}
+            <div class="settings-inline-actions">
+              <label class="ghost-button file-button" for="theme-preview-input">Preview On This PC</label>
+              <label class="ghost-button file-button" for="theme-upload-input">Save For All Devices</label>
+            </div>
           {:else}
-            <button class="ghost-button" type="button" on:click={linkLocalThemeMedia}>Apply Host File</button>
+            <button class="ghost-button" type="button" on:click={chooseHostLocalMedia}>Apply Host File</button>
           {/if}
         </div>
-        {#if prefersBrowserFilePicker}
-          <input id="theme-upload-input" class="visually-hidden" type="file" accept="image/*,video/*" on:change={chooseBrowserLocalMedia}>
+        {#if usesHostBrowserPicker}
+          <input id="theme-preview-input" class="visually-hidden" type="file" accept="image/*,video/*" on:change={previewBrowserLocalMedia}>
+          <input id="theme-upload-input" class="visually-hidden" type="file" accept="image/*,video/*" on:change={saveBrowserLocalMedia}>
         {:else}
           <div class="settings-form-grid">
             <label class="settings-field settings-field-full">
@@ -2421,6 +2598,11 @@
         {#if localLinkState !== "idle"}
           <div class={`upload-status upload-status-${localLinkState}`.trim()}>
             <div class="footer-note">{localLinkMessage}</div>
+            {#if localLinkState === "uploading" || localLinkProgressPercent > 0}
+              <div class="upload-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={localLinkProgressPercent}>
+                <div class="upload-progress-fill" style={`width:${localLinkProgressPercent}%`}></div>
+              </div>
+            {/if}
           </div>
         {/if}
         <div class="media-grid media-grid-wide">
@@ -2446,7 +2628,7 @@
               </article>
             {/each}
           {:else}
-            <div class="mini-card"><div class="footer-note">{prefersBrowserFilePicker ? "Choose a file from this computer to apply it instantly for this browser session." : "Paste a full file path from the host PC and Studio will render it directly without copying it."}</div></div>
+            <div class="mini-card"><div class="footer-note">{usesHostBrowserPicker ? "Preview On This PC keeps playback local to this browser. Save For All Devices imports the file so phones and tablets can render it too." : "This browser is marked as remote. Paste a full file path from the host PC and Studio will render it directly without copying it."}</div></div>
           {/if}
         </div>
       </section>

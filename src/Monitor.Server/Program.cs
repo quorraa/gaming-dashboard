@@ -6,6 +6,7 @@ using Monitor.Server.Services.Discord;
 using Monitor.Server.Services.Spotify;
 using Monitor.Server.Services.System;
 using Monitor.Server.Services.Temp;
+using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Net.Http.Headers;
@@ -66,6 +67,7 @@ builder.Services.AddHttpClient(nameof(PexelsService), client =>
 {
     client.Timeout = TimeSpan.FromSeconds(12);
 });
+builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<PexelsService>();
 builder.Services.AddSingleton<SpotifyService>();
 builder.Services.Configure<FormOptions>(options =>
@@ -156,8 +158,17 @@ app.MapPost("/api/media/link-local", (
     }
 });
 app.MapDelete("/api/media/local/{id}", (string id, ThemeMediaService themeMediaService) =>
-    themeMediaService.DeleteAsset(id) ? Results.NoContent() : Results.NotFound());
-app.MapGet("/api/media/local/{id}", (string id, ThemeMediaService themeMediaService) =>
+{
+    try
+    {
+        return themeMediaService.DeleteAsset(id) ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+app.MapGet("/api/media/local/{id}", (string id, HttpContext context, ThemeMediaService themeMediaService) =>
 {
     if (!themeMediaService.TryResolveAsset(id, out var fullPath, out _, out var downloadName))
     {
@@ -170,7 +181,17 @@ app.MapGet("/api/media/local/{id}", (string id, ThemeMediaService themeMediaServ
         contentType = "application/octet-stream";
     }
 
-    return Results.File(fullPath, contentType, enableRangeProcessing: true);
+    var fileInfo = new FileInfo(fullPath);
+    var entityTag = Microsoft.Net.Http.Headers.EntityTagHeaderValue.Parse($"W/\"{fileInfo.Length:x}-{fileInfo.LastWriteTimeUtc.Ticks:x}\"");
+    context.Response.Headers[HeaderNames.CacheControl] = "private, max-age=300";
+
+    return Results.File(
+        fullPath,
+        contentType,
+        fileDownloadName: null,
+        lastModified: fileInfo.LastWriteTimeUtc,
+        entityTag: entityTag,
+        enableRangeProcessing: true);
 });
 app.MapGet("/api/media/pexels/search", async (
     string query,
@@ -202,7 +223,112 @@ app.MapGet("/api/media/pexels/search", async (
         return Results.BadRequest(new { error = ex.Message });
     }
 });
-app.MapGet("/api/media/pexels/stream", async (
+app.MapMethods("/api/media/pexels/video/{id}", new[] { HttpMethods.Get, HttpMethods.Head }, async (
+    string id,
+    int? width,
+    int? height,
+    double? dpr,
+    HttpContext context,
+    DashboardPreferencesStore preferencesStore,
+    IHttpClientFactory httpClientFactory,
+    PexelsService pexelsService,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var rawUrl = await pexelsService.ResolveVideoProxyUrlAsync(
+            preferencesStore.Current.Theme.PexelsApiKey,
+            id,
+            Math.Max(1, width ?? 1280),
+            Math.Max(1, height ?? 720),
+            Math.Clamp(dpr ?? 1d, 1d, 2d),
+            cancellationToken);
+
+        using var request = new HttpRequestMessage(
+            HttpMethods.IsHead(context.Request.Method) ? HttpMethod.Head : HttpMethod.Get,
+            rawUrl);
+
+        if (context.Request.Headers.TryGetValue(HeaderNames.Range, out var rangeHeader)
+            && System.Net.Http.Headers.RangeHeaderValue.TryParse(rangeHeader.ToString(), out var parsedRange))
+        {
+            request.Headers.Range = parsedRange;
+        }
+
+        if (context.Request.Headers.TryGetValue(HeaderNames.IfRange, out var ifRangeHeader))
+        {
+            request.Headers.TryAddWithoutValidation(HeaderNames.IfRange, ifRangeHeader.ToString());
+        }
+
+        if (context.Request.Headers.TryGetValue(HeaderNames.IfNoneMatch, out var ifNoneMatchHeader))
+        {
+            request.Headers.TryAddWithoutValidation(HeaderNames.IfNoneMatch, ifNoneMatchHeader.ToString());
+        }
+
+        if (context.Request.Headers.TryGetValue(HeaderNames.IfModifiedSince, out var ifModifiedSinceHeader))
+        {
+            request.Headers.TryAddWithoutValidation(HeaderNames.IfModifiedSince, ifModifiedSinceHeader.ToString());
+        }
+
+        using var response = await httpClientFactory.CreateClient(nameof(PexelsService))
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (!response.IsSuccessStatusCode
+            && response.StatusCode != System.Net.HttpStatusCode.PartialContent
+            && response.StatusCode != System.Net.HttpStatusCode.NotModified
+            && response.StatusCode != System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
+        {
+            return Results.StatusCode((int)response.StatusCode);
+        }
+
+        context.Response.StatusCode = (int)response.StatusCode;
+        context.Response.ContentType = response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+        context.Response.Headers[HeaderNames.CacheControl] = "public, max-age=86400";
+
+        if (response.Content.Headers.ContentLength is long contentLength)
+        {
+            context.Response.ContentLength = contentLength;
+        }
+
+        if (response.Content.Headers.ContentRange is not null)
+        {
+            context.Response.Headers[HeaderNames.ContentRange] = response.Content.Headers.ContentRange.ToString();
+        }
+
+        if (response.Headers.AcceptRanges.Count > 0)
+        {
+            context.Response.Headers[HeaderNames.AcceptRanges] = string.Join(", ", response.Headers.AcceptRanges);
+        }
+
+        if (response.Content.Headers.LastModified is not null)
+        {
+            context.Response.Headers[HeaderNames.LastModified] = response.Content.Headers.LastModified.Value.ToString("R");
+        }
+
+        if (response.Headers.ETag is not null)
+        {
+            context.Response.Headers[HeaderNames.ETag] = response.Headers.ETag.ToString();
+        }
+
+        if (HttpMethods.IsHead(context.Request.Method)
+            || response.StatusCode == System.Net.HttpStatusCode.NotModified
+            || response.StatusCode == System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
+        {
+            return Results.Empty;
+        }
+
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using (stream)
+        {
+            await stream.CopyToAsync(context.Response.Body, cancellationToken);
+        }
+
+        return Results.Empty;
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+app.MapMethods("/api/media/pexels/stream", new[] { HttpMethods.Get, HttpMethods.Head }, async (
     string url,
     HttpContext context,
     IHttpClientFactory httpClientFactory,
@@ -214,23 +340,79 @@ app.MapGet("/api/media/pexels/stream", async (
         return Results.BadRequest(new { error = "Unsupported media host." });
     }
 
-    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+    using var request = new HttpRequestMessage(
+        HttpMethods.IsHead(context.Request.Method) ? HttpMethod.Head : HttpMethod.Get,
+        url);
+
+    if (context.Request.Headers.TryGetValue(HeaderNames.Range, out var rangeHeader)
+        && System.Net.Http.Headers.RangeHeaderValue.TryParse(rangeHeader.ToString(), out var parsedRange))
+    {
+        request.Headers.Range = parsedRange;
+    }
+
+    if (context.Request.Headers.TryGetValue(HeaderNames.IfRange, out var ifRangeHeader))
+    {
+        request.Headers.TryAddWithoutValidation(HeaderNames.IfRange, ifRangeHeader.ToString());
+    }
+
+    if (context.Request.Headers.TryGetValue(HeaderNames.IfNoneMatch, out var ifNoneMatchHeader))
+    {
+        request.Headers.TryAddWithoutValidation(HeaderNames.IfNoneMatch, ifNoneMatchHeader.ToString());
+    }
+
+    if (context.Request.Headers.TryGetValue(HeaderNames.IfModifiedSince, out var ifModifiedSinceHeader))
+    {
+        request.Headers.TryAddWithoutValidation(HeaderNames.IfModifiedSince, ifModifiedSinceHeader.ToString());
+    }
+
     using var response = await httpClientFactory.CreateClient(nameof(PexelsService))
         .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-    if (!response.IsSuccessStatusCode)
+    if (!response.IsSuccessStatusCode
+        && response.StatusCode != System.Net.HttpStatusCode.PartialContent
+        && response.StatusCode != System.Net.HttpStatusCode.NotModified
+        && response.StatusCode != System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
     {
         return Results.StatusCode((int)response.StatusCode);
     }
 
-    var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
-    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
     app.Logger.LogDebug("Proxying Pexels asset {Url}", url);
-    context.Response.ContentType = contentType;
+    context.Response.StatusCode = (int)response.StatusCode;
+    context.Response.ContentType = response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+    context.Response.Headers[HeaderNames.CacheControl] = "public, max-age=86400";
+
     if (response.Content.Headers.ContentLength is long contentLength)
     {
         context.Response.ContentLength = contentLength;
     }
 
+    if (response.Content.Headers.ContentRange is not null)
+    {
+        context.Response.Headers[HeaderNames.ContentRange] = response.Content.Headers.ContentRange.ToString();
+    }
+
+    if (response.Headers.AcceptRanges.Count > 0)
+    {
+        context.Response.Headers[HeaderNames.AcceptRanges] = string.Join(", ", response.Headers.AcceptRanges);
+    }
+
+    if (response.Content.Headers.LastModified is not null)
+    {
+        context.Response.Headers[HeaderNames.LastModified] = response.Content.Headers.LastModified.Value.ToString("R");
+    }
+
+    if (response.Headers.ETag is not null)
+    {
+        context.Response.Headers[HeaderNames.ETag] = response.Headers.ETag.ToString();
+    }
+
+    if (HttpMethods.IsHead(context.Request.Method)
+        || response.StatusCode == System.Net.HttpStatusCode.NotModified
+        || response.StatusCode == System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
+    {
+        return Results.Empty;
+    }
+
+    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
     await using (stream)
     {
         await stream.CopyToAsync(context.Response.Body, cancellationToken);

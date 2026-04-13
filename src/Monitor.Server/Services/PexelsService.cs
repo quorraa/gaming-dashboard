@@ -1,10 +1,11 @@
 using System.Net;
 using System.Text.Json;
 using Monitor.Server.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Monitor.Server.Services;
 
-public sealed class PexelsService(IHttpClientFactory httpClientFactory)
+public sealed class PexelsService(IHttpClientFactory httpClientFactory, IMemoryCache cache)
 {
     private static readonly string[] AllowedProxyHosts =
     [
@@ -67,6 +68,54 @@ public sealed class PexelsService(IHttpClientFactory httpClientFactory)
         return AllowedProxyHosts.Any(host => string.Equals(uri.Host, host, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task<string> ResolveVideoProxyUrlAsync(
+        string apiKey,
+        string assetId,
+        int targetWidth,
+        int targetHeight,
+        double devicePixelRatio,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new InvalidOperationException("Add a Pexels API key before using video backgrounds.");
+        }
+
+        if (string.IsNullOrWhiteSpace(assetId))
+        {
+            throw new InvalidOperationException("Pexels video id is required.");
+        }
+
+        var bucket = ResolveVideoBucket(targetWidth, targetHeight, devicePixelRatio);
+        var cacheKey = $"pexels-video-link:{assetId}:{bucket}";
+        if (cache.TryGetValue(cacheKey, out string? cachedLink) && !string.IsNullOrWhiteSpace(cachedLink))
+        {
+            return cachedLink;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.pexels.com/videos/videos/{Uri.EscapeDataString(assetId)}");
+        request.Headers.TryAddWithoutValidation("Authorization", apiKey);
+        using var response = await httpClientFactory.CreateClient(nameof(PexelsService)).SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var best = SelectVideoFile(json.RootElement, bucket);
+        if (best.ValueKind == JsonValueKind.Undefined)
+        {
+            throw new InvalidOperationException("No compatible Pexels video stream was found.");
+        }
+
+        var rawLink = best.GetProperty("link").GetString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawLink))
+        {
+            throw new InvalidOperationException("Pexels returned an empty video link.");
+        }
+
+        cache.Set(cacheKey, rawLink, TimeSpan.FromHours(6));
+        return rawLink;
+    }
+
     private static PexelsSearchResponseSnapshot ParsePhotos(string query, int page, int perPage, JsonElement root)
     {
         var results = new List<PexelsAssetSnapshot>();
@@ -115,7 +164,7 @@ public sealed class PexelsService(IHttpClientFactory httpClientFactory)
         var results = new List<PexelsAssetSnapshot>();
         foreach (var video in root.GetProperty("videos").EnumerateArray())
         {
-            var renderFile = SelectVideoFile(video);
+            var renderFile = SelectVideoFile(video, 1920);
             if (renderFile.ValueKind == JsonValueKind.Undefined)
             {
                 continue;
@@ -153,7 +202,7 @@ public sealed class PexelsService(IHttpClientFactory httpClientFactory)
             results);
     }
 
-    private static JsonElement SelectVideoFile(JsonElement video)
+    private static JsonElement SelectVideoFile(JsonElement video, int targetMaxDimension)
     {
         if (!video.TryGetProperty("video_files", out var files) || files.ValueKind != JsonValueKind.Array)
         {
@@ -161,7 +210,8 @@ public sealed class PexelsService(IHttpClientFactory httpClientFactory)
         }
 
         JsonElement best = default;
-        var bestScore = -1L;
+        long bestScore = long.MaxValue;
+        long bestArea = long.MaxValue;
         foreach (var file in files.EnumerateArray())
         {
             var fileType = file.TryGetProperty("file_type", out var type) ? type.GetString() : string.Empty;
@@ -172,16 +222,36 @@ public sealed class PexelsService(IHttpClientFactory httpClientFactory)
 
             var width = file.TryGetProperty("width", out var widthElement) ? widthElement.GetInt32() : 0;
             var height = file.TryGetProperty("height", out var heightElement) ? heightElement.GetInt32() : 0;
-            var score = (long)width * height;
-            if (score <= bestScore)
+            var maxDimension = Math.Max(width, height);
+            if (maxDimension <= 0)
+            {
+                continue;
+            }
+
+            var distance = maxDimension <= targetMaxDimension
+                ? targetMaxDimension - maxDimension
+                : (maxDimension - targetMaxDimension) + 100_000;
+            var area = (long)width * height;
+            if (distance > bestScore || (distance == bestScore && area >= bestArea))
             {
                 continue;
             }
 
             best = file;
-            bestScore = score;
+            bestScore = distance;
+            bestArea = area;
         }
 
         return best;
+    }
+
+    private static int ResolveVideoBucket(int targetWidth, int targetHeight, double devicePixelRatio)
+    {
+        var scale = Math.Clamp(devicePixelRatio, 1d, 2d);
+        var maxDimension = (int)Math.Ceiling(Math.Max(Math.Max(targetWidth, targetHeight), 1) * scale);
+        if (maxDimension <= 960) return 960;
+        if (maxDimension <= 1280) return 1280;
+        if (maxDimension <= 1920) return 1920;
+        return 2560;
     }
 }
