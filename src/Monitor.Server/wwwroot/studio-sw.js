@@ -1,4 +1,11 @@
-const CACHE_NAME = "gaming-dashboard-studio-v3";
+const CACHE_NAME = "gaming-dashboard-studio-v4";
+
+async function broadcastStatus(type, statuses) {
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const client of clients) {
+    client.postMessage({ type, statuses });
+  }
+}
 
 self.addEventListener("install", event => {
   event.waitUntil(self.skipWaiting());
@@ -13,22 +20,49 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("message", event => {
-  if (event.data?.type !== "cache-assets" || !Array.isArray(event.data.urls)) {
+  if (!Array.isArray(event.data?.urls)) {
     return;
   }
 
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    for (const url of event.data.urls) {
-      if (!url) {
-        continue;
-      }
+    const urls = [...new Set(event.data.urls.filter(Boolean))];
+    const statuses = {};
 
+    if (event.data.type === "cache-status") {
+      for (const url of urls) {
+        const cached = await cache.match(url);
+        statuses[url] = cached ? "cached" : "idle";
+      }
+      await broadcastStatus("cache-status", statuses);
+      return;
+    }
+
+    if (event.data.type !== "cache-assets") {
+      return;
+    }
+
+    for (const url of urls) {
+      statuses[url] = "pending";
+    }
+    await broadcastStatus("cache-assets-complete", statuses);
+
+    for (const url of urls) {
       try {
-        await cache.add(url);
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          statuses[url] = "error";
+          continue;
+        }
+
+        await cache.put(url, response.clone());
+        statuses[url] = "cached";
       } catch {
+        statuses[url] = "error";
       }
     }
+
+    await broadcastStatus("cache-assets-complete", statuses);
   })());
 });
 

@@ -24,6 +24,7 @@
   let pexelsQuery = "";
   let pexelsKind = "image";
   let pexelsWarning = "";
+  let mediaCacheState = {};
   let settingsOpen = false;
   let themeOpen = false;
   let viewportWidth = 1;
@@ -57,12 +58,13 @@
   let settingsSection = "panels";
   let discordForm = { enabled: false, relayUrl: "", apiKey: "", guildId: "", messagesChannelId: "", voiceChannelId: "", trackedUserId: "", latestMessagesCount: 6, favoriteUserIds: "" };
   let spotifyForm = { enabled: false, clientId: "", status: "Client ID required" };
-  let themeForm = { presetId: "neon-grid", pexelsApiKey: "" };
+  let themeForm = { presetId: "neon-grid", pexelsApiKey: "", dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 };
   let layoutEditing = false;
   let layoutEditorProfile = "";
   let layoutPreview = null;
   let layoutDrag = null;
   let dockDrag = null;
+  let suppressDockClicksUntil = 0;
   let dockControlsHidden = false;
   let dockInteractionLockUntil = 0;
   let dockInteractionTimer = null;
@@ -80,8 +82,22 @@
   $: layoutMode = profileKey === "desktop" ? "default" : profileKey;
   $: activeLayout = layoutPreview ?? preferences?.layout ?? snapshot?.ui?.layout;
   $: layoutProfile = getActiveLayoutProfile(activeLayout, profileKey, viewportWidth, viewportHeight);
-  $: background = preferences?.theme?.background ?? { source: "none", mediaKind: "none" };
-  $: themePresetId = preferences?.theme?.presetId ?? "neon-grid";
+  $: activeTheme = getActiveTheme(preferences?.theme, profileKey, viewportWidth, viewportHeight);
+  $: background = activeTheme.background;
+  $: themePresetId = activeTheme.presetId;
+  $: themeVisuals = activeTheme.visuals;
+  $: themeRecentSearches = preferences?.theme?.recentSearches ?? [];
+  $: themeFavoriteAssets = preferences?.theme?.favoriteAssets ?? [];
+  $: effectiveThemeVisuals = themeOpen
+    ? {
+        dimPercent: Number(themeForm.dimPercent ?? themeVisuals?.dimPercent ?? 42),
+        blurPx: Number(themeForm.blurPx ?? themeVisuals?.blurPx ?? 12),
+        mediaOpacityPercent: Number(themeForm.mediaOpacityPercent ?? themeVisuals?.mediaOpacityPercent ?? 100)
+      }
+    : themeVisuals;
+  $: themeMediaStyle = buildThemeMediaStyle(effectiveThemeVisuals);
+  $: themeScrimStyle = buildThemeScrimStyle(effectiveThemeVisuals);
+  $: themeViewportLabel = `${profileKey.replace(/-/g, " ")} · ${viewportWidth}x${viewportHeight}`;
   $: spotifyNow = snapshot?.spotify?.nowPlaying ?? null;
   $: shownSpotifyProgress = spotifySeekPreview ?? spotifyNow?.progressMs ?? 0;
   $: shownSpotifyVolume = spotifyVolumePreview ?? spotifyNow?.volumePercent ?? 0;
@@ -152,6 +168,7 @@
     window.addEventListener("pointermove", onGlobalPointerMove, true);
     window.addEventListener("pointerup", onGlobalPointerRelease, true);
     window.addEventListener("pointercancel", onGlobalPointerRelease, true);
+    navigator.serviceWorker?.addEventListener?.("message", onServiceWorkerMessage);
 
     return () => {
       window.removeEventListener("resize", onResize);
@@ -160,6 +177,7 @@
       window.removeEventListener("pointermove", onGlobalPointerMove, true);
       window.removeEventListener("pointerup", onGlobalPointerRelease, true);
       window.removeEventListener("pointercancel", onGlobalPointerRelease, true);
+      navigator.serviceWorker?.removeEventListener?.("message", onServiceWorkerMessage);
       if (socket) socket.close();
       clearTimeout(reconnectTimer);
       clearInterval(spotifyProgressTimer);
@@ -191,6 +209,7 @@
       if (mediaResponse.ok) localMedia = await mediaResponse.json();
       hydrateFromQuery();
       syncSpotifyTimer();
+      requestVisibleThemeCacheStatus();
     } catch {
     }
   }
@@ -201,6 +220,7 @@
       if (!response.ok) return;
       editorState = await response.json();
       syncForms(editorState);
+      requestVisibleThemeCacheStatus();
     } catch {
     }
   }
@@ -228,6 +248,7 @@
       await navigator.serviceWorker.register("/studio-sw.js", { updateViaCache: "none" });
       await navigator.serviceWorker.ready;
       mediaCacheReady = true;
+      requestVisibleThemeCacheStatus();
     } catch {
       mediaCacheReady = false;
     }
@@ -272,9 +293,13 @@
       clientId: currentPreferences.spotify?.clientId ?? "",
       status: currentPreferences.spotify?.isAuthorized ? "Connected" : (currentPreferences.spotify?.clientId ? "Ready to connect" : "Client ID required")
     };
+    const currentTheme = getActiveTheme(currentPreferences.theme, profileKey, viewportWidth, viewportHeight);
     themeForm = {
-      presetId: currentPreferences.theme?.presetId ?? "neon-grid",
-      pexelsApiKey: ""
+      presetId: currentTheme.presetId ?? "neon-grid",
+      pexelsApiKey: "",
+      dimPercent: Number(currentTheme.visuals?.dimPercent ?? 42),
+      blurPx: Number(currentTheme.visuals?.blurPx ?? 12),
+      mediaOpacityPercent: Number(currentTheme.visuals?.mediaOpacityPercent ?? 100)
     };
     const editorLayout = getActiveLayoutProfile(currentPreferences.layout, currentLayoutEditorProfile(), viewportWidth, viewportHeight);
     layoutColumnsValue = Number(editorLayout?.columns ?? 12);
@@ -290,6 +315,7 @@
     if (!response.ok) throw new Error("Failed to save settings");
     editorState = await response.json();
     syncForms(editorState);
+    requestVisibleThemeCacheStatus();
   }
 
   async function openSettingsDrawer() {
@@ -515,8 +541,11 @@
       width: rect.width,
       height: rect.height,
       mainOffsetY: getDockEditOffset(),
+      startX: event.clientX,
+      startY: event.clientY,
       offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top
+      offsetY: event.clientY - rect.top,
+      moved: false
     };
   }
 
@@ -532,6 +561,13 @@
   function startDockLinksDrag(event) {
     if (!layoutEditing || layoutProfile?.dock?.locked) return;
     startDockDrag(event);
+  }
+
+  function handleDockClickCapture(event) {
+    if (Date.now() < suppressDockClicksUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }
 
   async function toggleDockLock() {
@@ -610,6 +646,10 @@
   function onGlobalPointerMove(event) {
     if (dockDrag) {
       event.preventDefault();
+      const movedDistance = Math.abs(event.clientX - dockDrag.startX) + Math.abs(event.clientY - dockDrag.startY);
+      if (movedDistance > 6 && !dockDrag.moved) {
+        dockDrag = { ...dockDrag, moved: true };
+      }
       const maxX = Math.max(0, window.innerWidth - dockDrag.width - 8);
       const maxY = Math.max(0, window.innerHeight - dockDrag.height - 8);
       const x = Math.max(8, Math.min(maxX, Math.round(event.clientX - dockDrag.offsetX)));
@@ -656,6 +696,10 @@
     const drag = dockDrag;
     dockDrag = null;
     if (!drag || !layoutPreview) return;
+    if (drag.moved) {
+      suppressDockClicksUntil = Date.now() + 500;
+      lockDockInteractions(500);
+    }
     const dock = getActiveLayoutProfile(layoutPreview, drag.profile, viewportWidth, viewportHeight)?.dock ?? { x: 10, y: 10, locked: false, orientation: "horizontal" };
     await persistLayout(drag.profile, {
       dock: { x: dock.x, y: dock.y, locked: dock.locked, orientation: dock.orientation ?? "horizontal" }
@@ -730,7 +774,20 @@
     themeForm = { ...themeForm, pexelsApiKey: "" };
   }
 
-  const setPreset = (presetId) => saveSettings({ theme: { presetId } });
+  const setPreset = (presetId) => saveSettings({ theme: { presetId, ...currentThemeUpdateContext() } });
+
+  async function saveThemeVisuals() {
+    await saveSettings({
+      theme: {
+        visuals: {
+          dimPercent: Number(themeForm.dimPercent),
+          blurPx: Number(themeForm.blurPx),
+          mediaOpacityPercent: Number(themeForm.mediaOpacityPercent)
+        },
+        ...currentThemeUpdateContext()
+      }
+    });
+  }
 
   async function uploadThemeMedia(event) {
     const file = event.currentTarget.files?.[0];
@@ -741,21 +798,28 @@
     if (response.ok) {
       const asset = await response.json();
       localMedia = [asset, ...localMedia.filter((item) => item.id !== asset.id)];
+      requestVisibleThemeCacheStatus();
     }
     event.currentTarget.value = "";
   }
 
   async function saveThemeBackground(backgroundUpdate, urls = []) {
-    await saveSettings({ theme: { background: backgroundUpdate } });
+    await saveSettings({ theme: { background: backgroundUpdate, ...currentThemeUpdateContext() } });
     queueThemeCache(urls.filter(Boolean));
   }
 
-  const selectLocalMedia = (asset) => saveThemeBackground({ source: "local", mediaKind: asset.mediaKind, assetId: asset.id, label: asset.name, renderUrl: asset.url, previewUrl: asset.previewUrl, attribution: "", attributionUrl: "" }, [asset.url, asset.previewUrl]);
+  const selectLocalMedia = (asset) => saveThemeBackground({ source: "local", mediaKind: asset.mediaKind, assetId: asset.id, label: asset.name, renderUrl: asset.url, previewUrl: asset.previewUrl, attribution: "", attributionUrl: "" }, assetCacheUrls(asset));
+
+  const clearThemeBackground = () => saveThemeBackground({ source: "none", mediaKind: "none", assetId: "", label: "", renderUrl: "", previewUrl: "", attribution: "", attributionUrl: "" });
 
   async function deleteLocalMedia(assetId) {
     const response = await fetch(`/api/media/local/${encodeURIComponent(assetId)}`, { method: "DELETE" });
-    if (response.ok) localMedia = localMedia.filter((asset) => asset.id !== assetId);
+    if (response.ok) {
+      localMedia = localMedia.filter((asset) => asset.id !== assetId);
+      requestVisibleThemeCacheStatus();
+    }
   }
+
   async function runPexelsSearch(page = 1) {
     if (!pexelsQuery.trim()) {
       pexelsWarning = "Enter a search query first.";
@@ -772,9 +836,116 @@
     }
     pexelsWarning = "";
     pexelsResult = await response.json();
+    requestVisibleThemeCacheStatus();
+    await saveSettings({ theme: { recentSearch: pexelsQuery.trim() } });
   }
 
-  const selectPexelsResult = (asset) => saveThemeBackground({ source: asset.mediaKind === "video" ? "pexels-video" : "pexels-photo", mediaKind: asset.mediaKind, assetId: asset.id, label: asset.label, renderUrl: asset.renderUrl, previewUrl: asset.previewUrl, attribution: asset.attribution, attributionUrl: asset.attributionUrl }, [asset.renderUrl, asset.previewUrl]);
+  const selectPexelsResult = (asset) => saveThemeBackground({ source: asset.mediaKind === "video" ? "pexels-video" : "pexels-photo", mediaKind: asset.mediaKind, assetId: asset.id, label: asset.label, renderUrl: asset.renderUrl, previewUrl: asset.previewUrl, attribution: asset.attribution, attributionUrl: asset.attributionUrl }, assetCacheUrls(asset));
+
+  async function togglePexelsFavorite(asset) {
+    const assetId = String(asset.id ?? "");
+    const nextFavorites = themeAssetIsFavorite(asset)
+      ? themeFavoriteAssets.filter((item) => String(item.id) !== assetId)
+      : [
+          {
+            id: asset.id,
+            mediaKind: asset.mediaKind,
+            label: asset.label,
+            previewUrl: asset.previewUrl,
+            renderUrl: asset.renderUrl,
+            width: asset.width,
+            height: asset.height,
+            durationSeconds: asset.durationSeconds ?? null,
+            attribution: asset.attribution,
+            attributionUrl: asset.attributionUrl,
+            pexelsUrl: asset.pexelsUrl
+          },
+          ...themeFavoriteAssets
+        ];
+
+    await saveSettings({ theme: { favoriteAssets: nextFavorites } });
+    requestVisibleThemeCacheStatus();
+  }
+
+  const themeAssetIsFavorite = (asset) => themeFavoriteAssets.some((item) => String(item.id) === String(asset.id));
+
+  async function clearRecentThemeSearches() {
+    await saveSettings({ theme: { clearRecentSearches: true } });
+  }
+
+  function onServiceWorkerMessage(event) {
+    const message = event.data;
+    if (!message?.type || !message.statuses) {
+      return;
+    }
+
+    const next = { ...mediaCacheState };
+    Object.entries(message.statuses).forEach(([url, status]) => {
+      next[url] = {
+        cached: status === "cached",
+        pending: status === "pending",
+        error: status === "error"
+      };
+    });
+    mediaCacheState = next;
+  }
+
+  function postThemeCacheMessage(type, urls) {
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    if (!mediaCacheReady || !navigator.serviceWorker?.controller || !uniqueUrls.length) return;
+    navigator.serviceWorker.controller.postMessage({ type, urls: uniqueUrls });
+  }
+
+  function queueThemeCache(urls) {
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    if (!uniqueUrls.length) return;
+    mediaCacheState = {
+      ...mediaCacheState,
+      ...Object.fromEntries(uniqueUrls.map((url) => [url, { cached: false, pending: true, error: false }]))
+    };
+    postThemeCacheMessage("cache-assets", uniqueUrls);
+  }
+
+  function requestThemeCacheStatus(urls) {
+    postThemeCacheMessage("cache-status", urls);
+  }
+
+  function assetCacheUrls(asset) {
+    return [asset?.renderUrl ?? asset?.url ?? "", asset?.previewUrl ?? ""].filter(Boolean);
+  }
+
+  function collectVisibleThemeUrls() {
+    return [
+      ...assetCacheUrls(background ?? {}),
+      ...localMedia.flatMap(assetCacheUrls),
+      ...(pexelsResult?.results ?? []).flatMap(assetCacheUrls),
+      ...themeFavoriteAssets.flatMap(assetCacheUrls)
+    ];
+  }
+
+  function requestVisibleThemeCacheStatus() {
+    requestThemeCacheStatus(collectVisibleThemeUrls());
+  }
+
+  function cacheStateForUrls(urls) {
+    const tracked = urls.filter(Boolean);
+    if (!tracked.length) return "idle";
+    if (tracked.some((url) => mediaCacheState[url]?.pending)) return "pending";
+    if (tracked.every((url) => mediaCacheState[url]?.cached)) return "cached";
+    if (tracked.some((url) => mediaCacheState[url]?.error)) return "error";
+    if (tracked.some((url) => mediaCacheState[url])) return "partial";
+    return "idle";
+  }
+
+  function cacheLabelForUrls(urls) {
+    return ({
+      cached: "Cached",
+      pending: "Caching",
+      partial: "Partial",
+      error: "Retry needed",
+      idle: "Not cached"
+    })[cacheStateForUrls(urls)] ?? "Not cached";
+  }
 
   const wsSend = (payload) => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload)); };
 
@@ -802,11 +973,6 @@
       if (!snapshot?.spotify?.nowPlaying?.isPlaying) return;
       snapshot = { ...snapshot, spotify: { ...snapshot.spotify, nowPlaying: { ...snapshot.spotify.nowPlaying, progressMs: Math.min(snapshot.spotify.nowPlaying.durationMs, snapshot.spotify.nowPlaying.progressMs + 500) } } };
     }, 500);
-  }
-
-  function queueThemeCache(urls) {
-    if (!mediaCacheReady || !navigator.serviceWorker?.controller || !urls.length) return;
-    navigator.serviceWorker.controller.postMessage({ type: "cache-assets", urls });
   }
 
   async function toggleFullscreen() {
@@ -869,6 +1035,16 @@
     return `${profile}@${width}x${height}`;
   }
 
+  function currentThemeUpdateContext(profile = profileKey) {
+    const { width, height } = currentViewportDimensions();
+    return {
+      profileKey: profile,
+      viewportKey: `${profile}@${width}x${height}`,
+      viewportWidth: width,
+      viewportHeight: height
+    };
+  }
+
   function currentLayoutEditorProfile() {
     if (!layoutEditorProfile) {
       layoutEditorProfile = profileKey;
@@ -924,6 +1100,48 @@
       panels: variant.panels,
       dock: variant.dock ?? base.dock ?? { x: 10, y: 10, locked: false, orientation: "horizontal" }
     };
+  }
+
+  function findBestThemeVariant(theme, profile, width, height) {
+    const variants = Array.isArray(theme?.variants) ? theme.variants.filter((variant) => variant.profileKey === profile) : [];
+    if (!variants.length) return null;
+    const viewportKey = `${profile}@${width}x${height}`;
+    const exact = variants.find((item) => item.viewportKey === viewportKey);
+    if (exact) {
+      return exact;
+    }
+
+    return [...variants].sort((a, b) =>
+      (Math.abs((a.viewportWidth ?? width) - width) + Math.abs((a.viewportHeight ?? height) - height))
+      - (Math.abs((b.viewportWidth ?? width) - width) + Math.abs((b.viewportHeight ?? height) - height)))[0] ?? null;
+  }
+
+  function getActiveTheme(theme, profile, width, height) {
+    const base = theme ?? {
+      presetId: "neon-grid",
+      background: { source: "none", mediaKind: "none" },
+      visuals: { dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 }
+    };
+    const variant = findBestThemeVariant(base, profile, width, height);
+    return {
+      presetId: variant?.presetId ?? base.presetId ?? "neon-grid",
+      background: variant?.background ?? base.background ?? { source: "none", mediaKind: "none" },
+      visuals: variant?.visuals ?? base.visuals ?? { dimPercent: 42, blurPx: 12, mediaOpacityPercent: 100 }
+    };
+  }
+
+  function buildThemeMediaStyle(visuals) {
+    const blurPx = Number(visuals?.blurPx ?? 12);
+    const opacity = Math.max(0.15, Math.min(1, Number(visuals?.mediaOpacityPercent ?? 100) / 100));
+    return `opacity:${opacity.toFixed(2)};filter:saturate(1.04) contrast(1.02) blur(${blurPx}px);transform:scale(${(1 + blurPx / 280).toFixed(3)});`;
+  }
+
+  function buildThemeScrimStyle(visuals) {
+    const dim = Math.max(0, Math.min(90, Number(visuals?.dimPercent ?? 42)));
+    const topAlpha = (dim / 320).toFixed(3);
+    const bottomAlpha = (dim / 105).toFixed(3);
+    const accentAlpha = (dim / 520).toFixed(3);
+    return `background:linear-gradient(180deg, rgba(6,7,13,${topAlpha}), rgba(7,8,16,${bottomAlpha})),radial-gradient(circle at top left, rgba(38,93,226,${accentAlpha}), transparent 38%),radial-gradient(circle at bottom right, rgba(120,61,255,${Math.min(0.18, dim / 640).toFixed(3)}), transparent 36%);`;
   }
 
   function getMutableLayoutTarget(root, profile) {
@@ -1084,6 +1302,17 @@
     return original.replace(/[()]+/g, " ").replace(/\s{2,}/g, " ").trim() || (isDefault ? "Default" : "Audio Device");
   };
   const settingsMask = (value) => String(value ?? "").trim() || "No key saved yet.";
+  const formatBytes = (sizeBytes) => {
+    const size = Number(sizeBytes ?? 0);
+    if (!Number.isFinite(size) || size <= 0) {
+      return "0 B";
+    }
+
+    const units = ["B", "KB", "MB", "GB"];
+    const power = Math.min(units.length - 1, Math.floor(Math.log(size) / Math.log(1024)));
+    const normalized = size / (1024 ** power);
+    return `${normalized >= 10 || power === 0 ? normalized.toFixed(0) : normalized.toFixed(1)} ${units[power]}`;
+  };
   const isDiscordSession = (session) => String(session?.name ?? "").trim().toLowerCase() === "discord";
 
   function patchAudioInventory(mutator) {
@@ -1367,7 +1596,7 @@
   ];
 </script>
 
-<div class="theme-media-layer">
+<div class="theme-media-layer" style={themeMediaStyle}>
   {#if background?.renderUrl}
     {#if background.mediaKind === "video"}
       <video class="theme-background-video" src={background.renderUrl} poster={background.previewUrl || ""} autoplay muted loop playsinline preload="auto"></video>
@@ -1376,19 +1605,19 @@
     {/if}
   {/if}
 </div>
-<div class="theme-media-scrim"></div>
+<div class="theme-media-scrim" style={themeScrimStyle}></div>
 
-<div class={`floating-dock ${(layoutProfile?.dock?.orientation === "vertical") ? "is-vertical" : ""} ${layoutEditing && !(layoutProfile?.dock?.locked) ? "is-draggable" : ""}`.trim()} role="group" aria-label="Studio controls" bind:this={floatingDockEl} style={dockCssText} on:pointerdown={startDockSurfaceDrag}>
-  <div class={`floating-dock-edit ${dockControlsHidden ? "is-collapsed" : ""}`.trim()} role="presentation" bind:this={floatingDockEditEl} on:pointerdown={startDockSurfaceDrag}>
+<div class={`floating-dock ${(layoutProfile?.dock?.orientation === "vertical") ? "is-vertical" : ""} ${layoutEditing && !(layoutProfile?.dock?.locked) ? "is-draggable" : ""}`.trim()} role="group" aria-label="Studio controls" bind:this={floatingDockEl} style={dockCssText} on:pointerdown={startDockSurfaceDrag} on:click|capture={handleDockClickCapture}>
+  <div class={`floating-dock-edit ${dockControlsHidden ? "is-collapsed" : ""}`.trim()} role="presentation" bind:this={floatingDockEditEl} on:pointerdown={startDockSurfaceDrag} on:click|capture={handleDockClickCapture}>
     <button class="dock-move-handle" type="button" aria-label="Move controls" on:pointerdown={startDockDrag}>Move</button>
     <button class={`dock-orientation-toggle ${(layoutProfile?.dock?.orientation === "vertical") ? "is-active" : ""}`.trim()} type="button" aria-label="Switch controls orientation" on:click={toggleDockOrientation}>{layoutProfile?.dock?.orientation === "vertical" ? "Vertical" : "Horizontal"}</button>
     <button class={`dock-lock-toggle ${(layoutProfile?.dock?.locked) ? "is-locked" : ""}`.trim()} type="button" aria-label={(layoutProfile?.dock?.locked) ? "Unlock controls" : "Lock controls"} on:click={toggleDockLock}>{(layoutProfile?.dock?.locked) ? "Locked" : "Lock"}</button>
     <button class="dock-visibility-toggle" hidden={dockControlsHidden} type="button" aria-label="Hide layout controls" on:click={toggleDockControlsHidden}>Hide</button>
   </div>
-  <div class="floating-dock-main" role="presentation" on:pointerdown={startDockSurfaceDrag}>
-    <div class={`client-mode-links ${layoutEditing && !(layoutProfile?.dock?.locked) ? "is-drag-handle" : ""}`.trim()} role="presentation" on:pointerdown={startDockLinksDrag}>
-      <a class="client-mode-link is-active" href="/studio/" on:pointerdown={startDockLinksDrag}>Studio</a>
-      <a class="client-mode-link" href="/vanilla/" on:pointerdown={startDockLinksDrag}>Vanilla</a>
+  <div class="floating-dock-main" role="presentation" on:pointerdown={startDockSurfaceDrag} on:click|capture={handleDockClickCapture}>
+    <div class={`client-mode-links ${layoutEditing && !(layoutProfile?.dock?.locked) ? "is-drag-handle" : ""}`.trim()} role="presentation" on:pointerdown={startDockLinksDrag} on:click|capture={handleDockClickCapture}>
+      <a class="client-mode-link is-active" href="/studio/" on:pointerdown={startDockLinksDrag} on:click|capture={handleDockClickCapture}>Studio</a>
+      <a class="client-mode-link" href="/vanilla/" on:pointerdown={startDockLinksDrag} on:click|capture={handleDockClickCapture}>Vanilla</a>
       <button class="dock-reveal-toggle" hidden={!layoutEditing || !dockControlsHidden} type="button" aria-label="Show layout controls" on:click={toggleDockControlsHidden}>↑</button>
     </div>
       <button class={`theme-toggle ${themeOpen ? "is-active" : ""}`.trim()} type="button" aria-label="Open theme studio" on:click={() => { if (dockInteractionsLocked()) return; themeOpen = !themeOpen; settingsOpen = false; }}>✦</button>
@@ -1453,11 +1682,6 @@
               <input id="settings-show-device-labels" name="settings-show-device-labels" type="checkbox" bind:checked={audioForm.showDeviceLabels}>
               <span>Show output device labels in mixer</span>
             </label>
-            <div class="settings-inline-actions">
-              <button class={`ghost-button ${allInputsMuted ? "is-active" : ""}`.trim()} type="button" on:click={toggleAllInputsMute}>{allInputsMuted ? "Unmute all mics" : "Mute all mics"}</button>
-              <button class={`ghost-button ${discordOutputsMuted ? "is-active" : ""}`.trim()} type="button" disabled={!discordOutputSessions.length} on:click={toggleDiscordOutputsMute}>{discordOutputsMuted ? "Unmute Discord outputs" : "Mute Discord outputs"}</button>
-              <button class={`ghost-button ${allInputsMuted && discordOutputsMuted ? "is-active" : ""}`.trim()} type="button" disabled={!inputAudioDevices.length && !discordOutputSessions.length} on:click={toggleDiscordPrivacyMode}>{(allInputsMuted && discordOutputsMuted) ? "Restore Discord privacy" : "Mute mic + Discord"}</button>
-            </div>
           </section>
 
           <section class="settings-section">
@@ -1612,6 +1836,40 @@
     <button class="settings-close" type="button" on:click={() => (themeOpen = false)}>✕</button>
   </div>
 
+  <div class="theme-viewport-pill">Editing current viewport preset: {themeViewportLabel}</div>
+
+  <section class="settings-section">
+    <div class="settings-row">
+      <div class="section-title">Background</div>
+      <button class="ghost-button" type="button" on:click={clearThemeBackground}>Clear</button>
+    </div>
+    <div class="theme-background-summary">
+      <div>
+        <strong>{background?.label || "No background selected"}</strong>
+        <div class="footer-note">{background?.source === "none" ? "Fallback preset only" : `${background?.mediaKind ?? "media"} · ${background?.source ?? "custom"}`}</div>
+      </div>
+      <div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(background ?? {}))}`}>{cacheLabelForUrls(assetCacheUrls(background ?? {}))}</div>
+    </div>
+    <div class="settings-row">
+      <div class="section-title">Glass Controls</div>
+      <button class="ghost-button" type="button" on:click={saveThemeVisuals}>Apply look</button>
+    </div>
+    <div class="settings-form-grid">
+      <label class="settings-field">
+        <span class="settings-field-label">Dim</span>
+        <div class="settings-range-row"><input id="theme-dim-percent" name="theme-dim-percent" class="settings-range" type="range" min="0" max="90" step="1" bind:value={themeForm.dimPercent}><div class="settings-range-value">{themeForm.dimPercent}%</div></div>
+      </label>
+      <label class="settings-field">
+        <span class="settings-field-label">Blur</span>
+        <div class="settings-range-row"><input id="theme-blur-px" name="theme-blur-px" class="settings-range" type="range" min="0" max="40" step="1" bind:value={themeForm.blurPx}><div class="settings-range-value">{themeForm.blurPx}px</div></div>
+      </label>
+      <label class="settings-field settings-field-full">
+        <span class="settings-field-label">Media opacity</span>
+        <div class="settings-range-row"><input id="theme-media-opacity" name="theme-media-opacity" class="settings-range" type="range" min="15" max="100" step="1" bind:value={themeForm.mediaOpacityPercent}><div class="settings-range-value">{themeForm.mediaOpacityPercent}%</div></div>
+      </label>
+    </div>
+  </section>
+
   <section class="settings-section">
     <div class="section-title">Preset</div>
     <label class="settings-field">
@@ -1643,7 +1901,8 @@
             </div>
             <div class="media-card-body">
               <strong>{asset.name}</strong>
-              <div class="footer-note">{asset.mediaKind === "video" ? "Video" : "Image"} · {asset.sizeBytes}</div>
+              <div class="footer-note">{asset.mediaKind === "video" ? "Video" : "Image"} · {formatBytes(asset.sizeBytes)}</div>
+              <div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div>
             </div>
             <div class="media-card-actions">
               <button class="ghost-button" type="button" on:click={() => selectLocalMedia(asset)}>Apply</button>
@@ -1670,6 +1929,17 @@
     <div class="settings-form-grid">
       <label class="settings-field settings-field-full"><span class="settings-field-label">Search</span><input id="theme-pexels-search" name="theme-pexels-search" class="settings-input" type="search" bind:value={pexelsQuery} on:keydown={(event) => event.key === "Enter" && runPexelsSearch(1)}></label>
     </div>
+    {#if themeRecentSearches.length}
+      <div class="settings-row">
+        <div class="section-title">Recent searches</div>
+        <button class="ghost-button" type="button" on:click={clearRecentThemeSearches}>Clear</button>
+      </div>
+      <div class="toggle-grid recent-search-grid">
+        {#each themeRecentSearches as recentSearch}
+          <button class="toggle-pill" type="button" on:click={() => { pexelsQuery = recentSearch; runPexelsSearch(1); }}>{recentSearch}</button>
+        {/each}
+      </div>
+    {/if}
     <div class="settings-row media-search-actions">
       <button class="ghost-button" type="button" on:click={() => runPexelsSearch(1)}>Search</button>
     </div>
@@ -1692,9 +1962,10 @@
         {#each pexelsResult.results as asset}
           <article class={`media-card ${selectedPexels(asset) ? "is-selected" : ""}`.trim()}>
             <div class="media-card-preview"><img src={asset.previewUrl} alt={asset.label}></div>
-            <div class="media-card-body"><strong>{asset.label}</strong><div class="footer-note">{asset.attribution}</div></div>
+            <div class="media-card-body"><strong>{asset.label}</strong><div class="footer-note">{asset.attribution}</div><div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div></div>
             <div class="media-card-actions">
               <button class="ghost-button" type="button" on:click={() => selectPexelsResult(asset)}>Apply</button>
+              <button class={`ghost-button ${themeAssetIsFavorite(asset) ? "is-active" : ""}`.trim()} type="button" on:click={() => togglePexelsFavorite(asset)}>{themeAssetIsFavorite(asset) ? "Saved" : "Save"}</button>
               <a class="ghost-button" href={asset.pexelsUrl} target="_blank" rel="noreferrer">Pexels</a>
             </div>
           </article>
@@ -1704,6 +1975,26 @@
       {/if}
     </div>
     <div class="warning-text">{pexelsWarning}</div>
+  </section>
+
+  <section class="settings-section">
+    <div class="section-title">Saved Pexels picks</div>
+    <div class="media-grid media-grid-search">
+      {#if themeFavoriteAssets.length}
+        {#each themeFavoriteAssets as asset}
+          <article class={`media-card ${selectedPexels(asset) ? "is-selected" : ""}`.trim()}>
+            <div class="media-card-preview"><img src={asset.previewUrl} alt={asset.label}></div>
+            <div class="media-card-body"><strong>{asset.label}</strong><div class="footer-note">{asset.attribution}</div><div class={`media-status-pill state-${cacheStateForUrls(assetCacheUrls(asset))}`}>{cacheLabelForUrls(assetCacheUrls(asset))}</div></div>
+            <div class="media-card-actions">
+              <button class="ghost-button" type="button" on:click={() => selectPexelsResult(asset)}>Apply</button>
+              <button class="ghost-button danger" type="button" on:click={() => togglePexelsFavorite(asset)}>Remove</button>
+            </div>
+          </article>
+        {/each}
+      {:else}
+        <div class="mini-card"><div class="footer-note">Save the best Pexels results here so each device can reuse them quickly.</div></div>
+      {/if}
+    </div>
   </section>
   </form>
 </aside>
@@ -1831,7 +2122,25 @@
     </section>
 
     <section role="group" aria-label="Audio Mixer panel" data-panel="audio" class={`panel panel-audio ${!panelView.audio?.visible ? "is-hidden" : ""} ${panelView.audio?.locked ? "is-layout-locked" : ""} ${panelView.audio?.compact ? "is-layout-compact" : ""} ${panelView.audio?.tiny ? "is-layout-tiny" : ""}`.trim()} style={panelView.audio?.style ?? ""} on:pointerdown={(event) => handlePanelPointerDown(event, "audio")}>
-      <header class="panel-header"><span class="eyebrow">Audio Mixer</span></header>
+      <header class="panel-header">
+        <span class="eyebrow">Audio Mixer</span>
+        <div class="panel-header-actions">
+          <button
+            class={`panel-action-pill ${allInputsMuted ? "is-active" : ""}`.trim()}
+            type="button"
+            disabled={!inputAudioDevices.length}
+            on:click={toggleAllInputsMute}>
+            {allInputsMuted ? "Mic Muted" : "Mute Mic"}
+          </button>
+          <button
+            class={`panel-action-pill ${allInputsMuted && discordOutputsMuted ? "is-active" : ""}`.trim()}
+            type="button"
+            disabled={!inputAudioDevices.length && !discordOutputSessions.length}
+            on:click={toggleDiscordPrivacyMode}>
+            {allInputsMuted && discordOutputsMuted ? "Undeafen" : "Discord Deafen"}
+          </button>
+        </div>
+      </header>
       {#if layoutEditing}
         <div class="layout-shell" role="presentation">
           <button class="layout-move-handle" type="button" aria-label="Move panel" on:pointerdown={(event) => startLayoutDrag(event, "audio", "move")}>Move</button>

@@ -350,13 +350,21 @@ public sealed record ThemePreferencesSnapshot(
     string PresetId,
     string PexelsApiKey,
     string PexelsApiKeyHint,
-    ThemeBackgroundSnapshot Background)
+    ThemeBackgroundSnapshot Background,
+    ThemeVisualsSnapshot Visuals,
+    IReadOnlyList<ThemeVariantSnapshot> Variants,
+    IReadOnlyList<string> RecentSearches,
+    IReadOnlyList<PexelsAssetSnapshot> FavoriteAssets)
 {
     public static ThemePreferencesSnapshot Default { get; } = new(
         "neon-grid",
         string.Empty,
         string.Empty,
-        ThemeBackgroundSnapshot.Empty);
+        ThemeBackgroundSnapshot.Empty,
+        ThemeVisualsSnapshot.Default,
+        [],
+        [],
+        []);
 }
 
 public sealed record ThemeBackgroundSnapshot(
@@ -380,10 +388,35 @@ public sealed record ThemeBackgroundSnapshot(
         string.Empty);
 }
 
+public sealed record ThemeVisualsSnapshot(
+    int DimPercent,
+    int BlurPx,
+    int MediaOpacityPercent)
+{
+    public static ThemeVisualsSnapshot Default { get; } = new(42, 12, 100);
+}
+
+public sealed record ThemeVariantSnapshot(
+    string ViewportKey,
+    string ProfileKey,
+    int ViewportWidth,
+    int ViewportHeight,
+    string PresetId,
+    ThemeBackgroundSnapshot Background,
+    ThemeVisualsSnapshot Visuals);
+
 public sealed record ThemePreferencesUpdate(
     string? PresetId,
     string? PexelsApiKey,
-    ThemeBackgroundUpdate? Background);
+    ThemeBackgroundUpdate? Background,
+    ThemeVisualsUpdate? Visuals,
+    string? ViewportKey,
+    string? ProfileKey,
+    int? ViewportWidth,
+    int? ViewportHeight,
+    string? RecentSearch,
+    bool? ClearRecentSearches,
+    IReadOnlyList<PexelsAssetSnapshot>? FavoriteAssets);
 
 public sealed record ThemeBackgroundUpdate(
     string? Source,
@@ -394,6 +427,11 @@ public sealed record ThemeBackgroundUpdate(
     string? PreviewUrl,
     string? Attribution,
     string? AttributionUrl);
+
+public sealed record ThemeVisualsUpdate(
+    int? DimPercent,
+    int? BlurPx,
+    int? MediaOpacityPercent);
 
 public sealed record DiscordPreferencesUpdate(
     bool? Enabled,

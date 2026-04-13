@@ -129,13 +129,26 @@ public sealed class DashboardPreferencesStore
                 null => currentTheme.PexelsApiKey,
                 _ => themeUpdate.PexelsApiKey.Trim()
             };
+            var hasViewportThemeOverride = HasThemeViewportOverride(themeUpdate);
             var theme = new ThemePreferencesSnapshot(
-                NormalizeThemePreset(themeUpdate?.PresetId, currentTheme.PresetId),
+                hasViewportThemeOverride
+                    ? currentTheme.PresetId
+                    : NormalizeThemePreset(themeUpdate?.PresetId, currentTheme.PresetId),
                 pexelsApiKey,
                 BuildSecretHint(pexelsApiKey),
-                themeUpdate?.Background is null
+                hasViewportThemeOverride || themeUpdate?.Background is null
                     ? currentTheme.Background
-                    : NormalizeThemeBackground(currentTheme.Background, themeUpdate.Background));
+                    : NormalizeThemeBackground(currentTheme.Background, themeUpdate.Background),
+                hasViewportThemeOverride || themeUpdate?.Visuals is null
+                    ? currentTheme.Visuals
+                    : NormalizeThemeVisuals(themeUpdate.Visuals, currentTheme.Visuals),
+                themeUpdate is null
+                    ? currentTheme.Variants
+                    : MergeThemeVariants(currentTheme, themeUpdate),
+                MergeRecentSearches(currentTheme.RecentSearches, themeUpdate?.RecentSearch, themeUpdate?.ClearRecentSearches ?? false),
+                themeUpdate?.FavoriteAssets is null
+                    ? currentTheme.FavoriteAssets
+                    : NormalizePexelsAssets(themeUpdate.FavoriteAssets));
 
             _current = new DashboardPreferencesSnapshot(visiblePanels, audio, discord, spotify, layout, theme);
             PersistUnsafe();
@@ -263,7 +276,11 @@ public sealed class DashboardPreferencesStore
                 NormalizeThemePreset(settings.Theme.DefaultPresetId, ThemePreferencesSnapshot.Default.PresetId),
                 settings.Theme.PexelsApiKey,
                 BuildSecretHint(settings.Theme.PexelsApiKey),
-                ThemeBackgroundSnapshot.Empty));
+                ThemeBackgroundSnapshot.Empty,
+                ThemeVisualsSnapshot.Default,
+                [],
+                [],
+                []));
     }
 
     private void PersistUnsafe()
@@ -375,7 +392,11 @@ public sealed class DashboardPreferencesStore
             NormalizeThemePreset(candidate.PresetId, fallback.PresetId),
             candidate.PexelsApiKey?.Trim() ?? fallback.PexelsApiKey,
             BuildSecretHint(candidate.PexelsApiKey?.Trim() ?? fallback.PexelsApiKey),
-            NormalizeThemeBackgroundSnapshot(candidate.Background));
+            NormalizeThemeBackgroundSnapshot(candidate.Background),
+            NormalizeThemeVisualsSnapshot(candidate.Visuals),
+            NormalizeThemeVariants(candidate.Variants, fallback),
+            NormalizeRecentSearches(candidate.RecentSearches),
+            NormalizePexelsAssets(candidate.FavoriteAssets));
     }
 
     private static DashboardLayoutPreferencesSnapshot MergeLayoutPreferences(
@@ -695,6 +716,197 @@ public sealed class DashboardPreferencesStore
             candidate.PreviewUrl?.Trim() ?? string.Empty,
             candidate.Attribution?.Trim() ?? string.Empty,
             candidate.AttributionUrl?.Trim() ?? string.Empty);
+    }
+
+    private static ThemeVisualsSnapshot NormalizeThemeVisuals(
+        ThemeVisualsUpdate? update,
+        ThemeVisualsSnapshot current)
+    {
+        if (update is null)
+        {
+            return current;
+        }
+
+        return new ThemeVisualsSnapshot(
+            Math.Clamp(update.DimPercent ?? current.DimPercent, 0, 90),
+            Math.Clamp(update.BlurPx ?? current.BlurPx, 0, 40),
+            Math.Clamp(update.MediaOpacityPercent ?? current.MediaOpacityPercent, 15, 100));
+    }
+
+    private static ThemeVisualsSnapshot NormalizeThemeVisualsSnapshot(ThemeVisualsSnapshot? candidate)
+    {
+        if (candidate is null)
+        {
+            return ThemeVisualsSnapshot.Default;
+        }
+
+        return new ThemeVisualsSnapshot(
+            Math.Clamp(candidate.DimPercent, 0, 90),
+            Math.Clamp(candidate.BlurPx, 0, 40),
+            Math.Clamp(candidate.MediaOpacityPercent, 15, 100));
+    }
+
+    private static bool HasThemeViewportOverride(ThemePreferencesUpdate? update)
+    {
+        return update is not null
+            && !string.IsNullOrWhiteSpace(update.ViewportKey)
+            && update.ViewportWidth.GetValueOrDefault() > 0
+            && update.ViewportHeight.GetValueOrDefault() > 0
+            && (update.PresetId is not null || update.Background is not null || update.Visuals is not null);
+    }
+
+    private static ThemeVariantSnapshot[] MergeThemeVariants(
+        ThemePreferencesSnapshot current,
+        ThemePreferencesUpdate update)
+    {
+        var variants = NormalizeThemeVariants(current.Variants, current)
+            .ToDictionary(item => item.ViewportKey, StringComparer.OrdinalIgnoreCase);
+
+        if (!HasThemeViewportOverride(update))
+        {
+            return variants.Values
+                .OrderBy(item => item.ProfileKey, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.ViewportWidth)
+                .ThenBy(item => item.ViewportHeight)
+                .ToArray();
+        }
+
+        var viewportKey = update.ViewportKey!.Trim();
+        var profileKey = NormalizeThemeProfileKey(update.ProfileKey);
+        var currentVariant = variants.TryGetValue(viewportKey, out var existing)
+            ? existing
+            : new ThemeVariantSnapshot(
+                viewportKey,
+                profileKey,
+                update.ViewportWidth!.Value,
+                update.ViewportHeight!.Value,
+                current.PresetId,
+                current.Background,
+                current.Visuals);
+
+        variants[viewportKey] = NormalizeThemeVariant(new ThemeVariantSnapshot(
+            viewportKey,
+            profileKey,
+            update.ViewportWidth!.Value,
+            update.ViewportHeight!.Value,
+            NormalizeThemePreset(update.PresetId, currentVariant.PresetId),
+            update.Background is null
+                ? currentVariant.Background
+                : NormalizeThemeBackground(currentVariant.Background, update.Background),
+            update.Visuals is null
+                ? currentVariant.Visuals
+                : NormalizeThemeVisuals(update.Visuals, currentVariant.Visuals)),
+            current);
+
+        return variants.Values
+            .OrderBy(item => item.ProfileKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.ViewportWidth)
+            .ThenBy(item => item.ViewportHeight)
+            .ToArray();
+    }
+
+    private static ThemeVariantSnapshot[] NormalizeThemeVariants(
+        IReadOnlyList<ThemeVariantSnapshot>? candidates,
+        ThemePreferencesSnapshot fallback)
+    {
+        if (candidates is null || candidates.Count == 0)
+        {
+            return [];
+        }
+
+        return candidates
+            .Where(item => !string.IsNullOrWhiteSpace(item.ViewportKey) && item.ViewportWidth > 0 && item.ViewportHeight > 0)
+            .Select(item => NormalizeThemeVariant(item, fallback))
+            .GroupBy(item => item.ViewportKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .OrderBy(item => item.ProfileKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.ViewportWidth)
+            .ThenBy(item => item.ViewportHeight)
+            .ToArray();
+    }
+
+    private static ThemeVariantSnapshot NormalizeThemeVariant(
+        ThemeVariantSnapshot candidate,
+        ThemePreferencesSnapshot fallback)
+    {
+        return new ThemeVariantSnapshot(
+            candidate.ViewportKey.Trim(),
+            NormalizeThemeProfileKey(candidate.ProfileKey),
+            Math.Max(1, candidate.ViewportWidth),
+            Math.Max(1, candidate.ViewportHeight),
+            NormalizeThemePreset(candidate.PresetId, fallback.PresetId),
+            NormalizeThemeBackgroundSnapshot(candidate.Background),
+            NormalizeThemeVisualsSnapshot(candidate.Visuals));
+    }
+
+    private static string[] NormalizeRecentSearches(IEnumerable<string>? candidate)
+    {
+        if (candidate is null)
+        {
+            return [];
+        }
+
+        return candidate
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(10)
+            .ToArray();
+    }
+
+    private static string[] MergeRecentSearches(
+        IReadOnlyList<string> current,
+        string? recentSearch,
+        bool clearRecentSearches)
+    {
+        if (clearRecentSearches)
+        {
+            return [];
+        }
+
+        if (string.IsNullOrWhiteSpace(recentSearch))
+        {
+            return NormalizeRecentSearches(current);
+        }
+
+        return NormalizeRecentSearches([recentSearch.Trim(), ..current]);
+    }
+
+    private static PexelsAssetSnapshot[] NormalizePexelsAssets(IEnumerable<PexelsAssetSnapshot>? candidate)
+    {
+        if (candidate is null)
+        {
+            return [];
+        }
+
+        return candidate
+            .Where(item => !string.IsNullOrWhiteSpace(item.Id) && !string.IsNullOrWhiteSpace(item.Label))
+            .Select(item => new PexelsAssetSnapshot(
+                item.Id.Trim(),
+                NormalizeThemeMediaKind(item.MediaKind, "image"),
+                item.Label.Trim(),
+                item.PreviewUrl?.Trim() ?? string.Empty,
+                item.RenderUrl?.Trim() ?? string.Empty,
+                Math.Max(0, item.Width),
+                Math.Max(0, item.Height),
+                item.DurationSeconds,
+                item.Attribution?.Trim() ?? string.Empty,
+                item.AttributionUrl?.Trim() ?? string.Empty,
+                item.PexelsUrl?.Trim() ?? string.Empty))
+            .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Take(24)
+            .ToArray();
+    }
+
+    private static string NormalizeThemeProfileKey(string? profileKey)
+    {
+        var normalized = profileKey?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "desktop" or "tablet-landscape" or "phone-landscape" => normalized,
+            _ => "desktop"
+        };
     }
 
     private static string NormalizeThemeSource(string? source, string fallback)

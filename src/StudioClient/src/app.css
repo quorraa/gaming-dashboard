@@ -91,6 +91,7 @@ body.studio-client {
 .theme-media-layer {
   z-index: 0;
   overflow: hidden;
+  transition: opacity 180ms ease, transform 220ms ease, filter 220ms ease;
 }
 
 .theme-background-image,
@@ -98,7 +99,7 @@ body.studio-client {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: saturate(1.04) contrast(1.02);
+  display: block;
 }
 
 .theme-media-scrim {
@@ -107,6 +108,7 @@ body.studio-client {
     linear-gradient(180deg, rgba(6, 7, 13, 0.02), rgba(7, 8, 16, 0.18)),
     radial-gradient(circle at top left, rgba(38, 93, 226, 0.06), transparent 38%),
     radial-gradient(circle at bottom right, rgba(120, 61, 255, 0.05), transparent 36%);
+  transition: background 180ms ease;
 }
 
 .theme-attribution {
@@ -472,6 +474,50 @@ body.settings-open .settings-drawer {
   min-width: 0;
 }
 
+.theme-viewport-pill,
+.media-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(7, 11, 24, 0.34);
+  color: rgba(237, 241, 255, 0.78);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.theme-viewport-pill {
+  margin-bottom: 16px;
+}
+
+.media-status-pill {
+  width: fit-content;
+  margin-top: 8px;
+  letter-spacing: 0.05em;
+}
+
+.media-status-pill.state-cached {
+  color: var(--lime);
+  border-color: rgba(49, 255, 139, 0.32);
+}
+
+.media-status-pill.state-pending,
+.media-status-pill.state-partial {
+  color: var(--amber);
+  border-color: rgba(255, 191, 47, 0.28);
+}
+
+.media-status-pill.state-error {
+  color: #ff9db4;
+  border-color: rgba(255, 84, 125, 0.28);
+}
+
 .settings-panel-grid {
   display: grid;
   gap: 16px;
@@ -543,6 +589,10 @@ body.settings-open .settings-drawer {
   margin-top: 12px;
 }
 
+.recent-search-grid {
+  margin-top: 12px;
+}
+
 .media-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -608,6 +658,7 @@ body.settings-open .settings-drawer {
 .media-card-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .ghost-button.danger {
@@ -635,6 +686,23 @@ body.settings-open .settings-drawer {
   color: #f7fbff;
   box-shadow: 0 0 14px rgba(31, 226, 255, 0.14);
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+}
+
+.theme-background-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(8, 12, 24, 0.3), rgba(10, 14, 28, 0.18));
+  margin-bottom: 14px;
+}
+
+.theme-background-summary strong {
+  display: block;
+  font-size: 0.95rem;
 }
 
 .audio-app-grid {
@@ -1033,6 +1101,45 @@ body.layout-editing .panel.is-layout-tiny .layout-lock-toggle {
   gap: 10px;
 }
 
+.panel-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.panel-action-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(83, 221, 255, 0.24);
+  background: rgba(8, 12, 26, 0.34);
+  color: rgba(237, 241, 255, 0.88);
+  font: inherit;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.panel-action-pill.is-active {
+  border-color: rgba(255, 191, 47, 0.42);
+  color: var(--amber);
+  background: linear-gradient(135deg, rgba(255, 191, 47, 0.18), rgba(255, 145, 64, 0.14));
+  box-shadow: 0 0 16px rgba(255, 191, 47, 0.14);
+}
+
+.panel-action-pill:disabled {
+  opacity: 0.48;
+}
+
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.24em;
@@ -1251,15 +1358,20 @@ body.layout-editing .panel.is-layout-tiny .layout-lock-toggle {
 .discord-identity-card,
 .discord-line,
 .discord-message-row {
-  background: rgba(255, 255, 255, 0.018);
-  border: 1px solid rgba(110, 128, 192, 0.15);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+    radial-gradient(circle at top left, rgba(31, 226, 255, 0.05), transparent 48%);
+  border: 1px solid rgba(110, 128, 192, 0.18);
   border-radius: 10px;
   backdrop-filter: blur(14px) saturate(1.08);
   -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .discord-identity-card {
   padding: 8px 10px;
+  border-color: rgba(31, 226, 255, 0.24);
+  box-shadow: 0 0 18px rgba(31, 226, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .discord-identity-row,
@@ -1364,11 +1476,14 @@ body.layout-editing .panel.is-layout-tiny .layout-lock-toggle {
 .spotify-controls,
 .spotify-progress-block,
 .spotify-volume-row {
-  background: rgba(255, 255, 255, 0.018);
-  border: 1px solid rgba(110, 128, 192, 0.15);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.012)),
+    radial-gradient(circle at top left, rgba(31, 226, 255, 0.05), transparent 46%);
+  border: 1px solid rgba(110, 128, 192, 0.18);
   border-radius: 12px;
   backdrop-filter: blur(14px) saturate(1.08);
   -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .spotify-now {
@@ -1390,6 +1505,7 @@ body.layout-editing .panel.is-layout-tiny .layout-lock-toggle {
   object-fit: cover;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.24);
 }
 
 .spotify-cover-fallback {
@@ -1465,6 +1581,7 @@ body.layout-editing .panel.is-layout-tiny .layout-lock-toggle {
 .spotify-controls {
   justify-content: center;
   padding: 10px;
+  gap: 10px;
 }
 
 .spotify-control-button {
@@ -1509,6 +1626,51 @@ body.layout-editing .panel.is-layout-tiny .layout-lock-toggle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.spotify-progress-block,
+.spotify-volume-row {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 0 18px rgba(31, 226, 255, 0.04);
+}
+
+.panel-discord.is-layout-compact .discord-line-side {
+  max-width: 36%;
+}
+
+.panel-discord.is-layout-tiny .discord-section-title,
+.panel-discord.is-layout-tiny .discord-group-note {
+  display: none;
+}
+
+.panel-discord.is-layout-tiny .discord-subtitle,
+.panel-discord.is-layout-tiny .discord-line-side,
+.panel-discord.is-layout-tiny .discord-message-copy {
+  font-size: 0.66rem;
+}
+
+.panel-spotify.is-layout-compact .spotify-now {
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+}
+
+.panel-spotify.is-layout-compact .spotify-cover {
+  width: 68px;
+  height: 68px;
+}
+
+.panel-spotify.is-layout-tiny .spotify-chip {
+  padding: 5px 8px;
+  font-size: 0.74rem;
+}
+
+.panel-spotify.is-layout-tiny .spotify-controls {
+  gap: 6px;
+}
+
+.panel-spotify.is-layout-tiny .spotify-control-button {
+  min-width: 36px;
+  min-height: 30px;
 }
 
 .spotify-empty {
@@ -1782,6 +1944,17 @@ body.layout-phone-landscape .panel-header {
   margin-bottom: 6px;
 }
 
+body.layout-phone-landscape .panel-header-actions {
+  gap: 6px;
+}
+
+body.layout-phone-landscape .panel-action-pill {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+}
+
 body.layout-phone-landscape .eyebrow {
   font-size: 0.56rem;
   letter-spacing: 0.18em;
@@ -1938,7 +2111,7 @@ body.layout-phone-landscape .panel-discord {
 }
 
 body.layout-phone-landscape .spotify-card {
-  gap: 6px;
+  gap: 7px;
 }
 
 body.layout-phone-landscape .spotify-now {
@@ -1984,6 +2157,7 @@ body.layout-phone-landscape .discord-identity-card,
 body.layout-phone-landscape .discord-line,
 body.layout-phone-landscape .discord-message-row {
   padding: 4px 6px;
+  border-radius: 9px;
 }
 
 body.layout-phone-landscape .discord-section-title,
@@ -1994,6 +2168,10 @@ body.layout-phone-landscape .discord-group-note,
 body.layout-phone-landscape .discord-empty,
 body.layout-phone-landscape .panel-state {
   font-size: 0.62rem;
+}
+
+body.layout-phone-landscape .discord-line-side {
+  max-width: 34%;
 }
 
 body.layout-phone-landscape .system-list {
@@ -2168,7 +2346,7 @@ body.layout-tablet-landscape .discord-message-row {
 }
 
 body.layout-tablet-landscape .spotify-card {
-  gap: 8px;
+  gap: 9px;
 }
 
 body.layout-tablet-landscape .spotify-now {
@@ -2197,12 +2375,22 @@ body.layout-tablet-landscape .spotify-volume-row {
   padding: 8px 10px;
 }
 
+body.layout-tablet-landscape .media-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 body.layout-tablet-landscape .panel-system {
   padding: 9px 10px 10px;
 }
 
 body.layout-tablet-landscape .panel-system .panel-header {
   margin-bottom: 7px;
+}
+
+body.layout-tablet-landscape .panel-action-pill {
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 0.66rem;
 }
 
 body.layout-tablet-landscape .panel-system .system-list {
